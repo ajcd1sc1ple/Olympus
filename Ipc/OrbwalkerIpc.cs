@@ -75,10 +75,22 @@ public sealed class OrbwalkerIpc : IOrbwalkerIpc, IDisposable
 
     public IReadOnlyList<uint> EnabledJobs()
     {
-        var jobs = TryInvoke<List<uint>?>(_enabledJobs, null);
-        if (jobs is null || jobs.Count == 0)
+        if (_enabledJobs is null)
             return Array.Empty<uint>();
-        return jobs;
+
+        try
+        {
+            var jobs = _enabledJobs.InvokeFunc();
+            return jobs is { Count: > 0 } ? jobs : Array.Empty<uint>();
+        }
+        catch (IpcNotReadyError)
+        {
+            return Array.Empty<uint>();
+        }
+        catch
+        {
+            return Array.Empty<uint>();
+        }
     }
 
     public bool IsActiveForJob(uint jobId)
