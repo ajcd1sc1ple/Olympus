@@ -106,7 +106,7 @@
   "config.general.start_on_auto_attack_desc": "When enabled, Olympus starts executing the rotation as soon as auto-attack is active on a target, before the server sets the in-combat flag.",
   "config.general.enable_orbwalker_integration": "Enable Orbwalker integration",
   "config.general.enable_orbwalker_integration_desc": "When Orbwalker is installed and enabled for your job, Olympus will hardcast while you hold move keys — Orbwalker locks movement so casts are not cancelled.",
-  "config.general.orbwalker_help": "Install from puni.sh/plugin/Orbwalker. Enable the plugin and your job in /orbwalker. Prefer combat slidecast / force-stop mode.",
+  "config.general.orbwalker_help": "Install from puni.sh/plugin/Orbwalker. Enable the plugin and your job in /orbwalker. Turn on combat force-stop / slidecast mode so Orbwalker locks you before each hardcast.",
   "config.general.orbwalker_status_disabled": "Status: Integration off",
   "config.general.orbwalker_status_not_installed": "Status: Orbwalker not installed / not loaded",
   "config.general.orbwalker_status_plugin_off": "Status: Orbwalker plugin disabled",
