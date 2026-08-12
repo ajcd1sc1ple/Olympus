@@ -2,7 +2,9 @@ using System;
 using System.Linq;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Plugin.Services;
 using Olympus.Config;
+using Olympus.Ipc;
 using Olympus.Localization;
 using Olympus.Services.Targeting;
 
@@ -15,6 +17,8 @@ public sealed class GeneralSection
 {
     private readonly Configuration config;
     private readonly Action save;
+    private readonly IOrbwalkerIpc? orbwalkerIpc;
+    private readonly IClientState? clientState;
 
     private string[] GetStrategyNames() =>
     [
@@ -49,10 +53,12 @@ public sealed class GeneralSection
         Loc.T(LocalizedStrings.RoleActions.SurecastModeAuto, "Use on Cooldown")
     ];
 
-    public GeneralSection(Configuration config, Action save)
+    public GeneralSection(Configuration config, Action save, IOrbwalkerIpc? orbwalkerIpc = null, IClientState? clientState = null)
     {
         this.config = config;
         this.save = save;
+        this.orbwalkerIpc = orbwalkerIpc;
+        this.clientState = clientState;
     }
 
     public void DrawGeneral()
@@ -217,8 +223,50 @@ public sealed class GeneralSection
                 Loc.T(LocalizedStrings.General.EnablePingCompensationDesc, "Adds your measured network delay to the weave-window cost calculation, reducing GCD clipping on high-latency connections. Leave off unless you notice clipped GCDs."),
                 this.save);
 
+            ConfigUIHelpers.Spacing();
+
+            DrawOrbwalkerIntegration();
+
             ConfigUIHelpers.EndIndent();
         }
+    }
+
+    private void DrawOrbwalkerIntegration()
+    {
+        ConfigUIHelpers.Toggle(
+            Loc.T(LocalizedStrings.General.EnableOrbwalkerIntegration, "Enable Orbwalker integration"),
+            () => this.config.EnableOrbwalkerIntegration,
+            v => this.config.EnableOrbwalkerIntegration = v,
+            Loc.T(LocalizedStrings.General.EnableOrbwalkerIntegrationDesc,
+                "When Orbwalker is installed and enabled for your job, Olympus will hardcast while you hold move keys — Orbwalker locks movement so casts are not cancelled."),
+            this.save);
+
+        ImGui.TextDisabled(GetOrbwalkerStatusText());
+        ImGui.TextDisabled(Loc.T(LocalizedStrings.General.OrbwalkerHelp,
+            "Install from puni.sh/plugin/Orbwalker. Enable the plugin and your job in /orbwalker. Prefer combat slidecast / force-stop mode."));
+    }
+
+    private string GetOrbwalkerStatusText()
+    {
+        if (!this.config.EnableOrbwalkerIntegration)
+            return Loc.T(LocalizedStrings.General.OrbwalkerStatusDisabled, "Status: Integration off");
+
+        if (this.orbwalkerIpc is null || !this.orbwalkerIpc.Available)
+            return Loc.T(LocalizedStrings.General.OrbwalkerStatusNotInstalled, "Status: Orbwalker not installed / not loaded");
+
+        if (!this.orbwalkerIpc.PluginEnabled())
+            return Loc.T(LocalizedStrings.General.OrbwalkerStatusPluginOff, "Status: Orbwalker plugin disabled");
+
+        var jobId = this.clientState?.LocalPlayer?.ClassJob.RowId ?? 0;
+        if (jobId != 0 && this.orbwalkerIpc.IsActiveForJob(jobId))
+        {
+            return this.orbwalkerIpc.OrbwalkingMode()
+                ? Loc.T(LocalizedStrings.General.OrbwalkerStatusActive, "Status: Active for current job")
+                : Loc.T(LocalizedStrings.General.OrbwalkerStatusActiveNoForceStop,
+                    "Status: Active for current job (enable combat force-stop / slidecast in Orbwalker for best results)");
+        }
+
+        return Loc.T(LocalizedStrings.General.OrbwalkerStatusJobOff, "Status: Current job not enabled in Orbwalker");
     }
 
     private void DrawWindowBehaviorSection()

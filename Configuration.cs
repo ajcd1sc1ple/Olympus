@@ -50,12 +50,18 @@ public sealed class Configuration : IPluginConfiguration
     /// Higher values = more conservative (safer), lower = more aggressive (faster DPS).
     /// Valid range: 0.0 to 2.0 seconds.
     /// </summary>
-    private float _movementTolerance = 0.1f;
+    private float _movementTolerance = 0.25f;
     public float MovementTolerance
     {
         get => _movementTolerance;
         set => _movementTolerance = Math.Clamp(value, 0.0f, 2.0f);
     }
+
+    /// <summary>
+    /// When true and PunishXIV Orbwalker is loaded/enabled for the current job,
+    /// Olympus allows cast-time GCDs while move keys are held (Orbwalker locks movement).
+    /// </summary>
+    public bool EnableOrbwalkerIntegration { get; set; } = true;
 
     /// <summary>
     /// When true, Olympus will start executing the rotation when auto-attack is active

@@ -137,6 +137,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly SmartAoEService smartAoEService;
 
     private readonly OlympusIpc olympusIpc;
+    private readonly OrbwalkerIpc orbwalkerIpc;
     private readonly UpdateCheckerService updateCheckerService;
 
     // Pull-intent state machine + consumable services (tincture automation)
@@ -369,11 +370,13 @@ public sealed class Plugin : IDalamudPlugin
             objectTable, clientState, bnpcRankProbe,
             () => configuration.Movement);
         this.cameraAzimuthProbe = new Olympus.Services.Movement.CameraAzimuthProbe();
+        this.orbwalkerIpc = new OrbwalkerIpc(pluginInterface, log);
         this.trashAvoidanceService = new Olympus.Services.Movement.TrashAvoidanceService(
             rmiWalkHookService, enemyAoECastTracker, bossCombatDetector,
             bgCollisionProbe, movementClock,
             () => configuration.Movement, log, clientState, highEndContent: highEndContentService, objectTable: objectTable, condition: condition,
-            cameraProbe: cameraAzimuthProbe);
+            cameraProbe: cameraAzimuthProbe,
+            orbwalkerIpc: orbwalkerIpc);
         this.interactDispatchService = new Olympus.Services.Movement.InteractDispatchService(
             objectTable, clientState, objectInteractor, movementClock,
             () => configuration.Movement, log);
@@ -439,7 +442,7 @@ public sealed class Plugin : IDalamudPlugin
         this.drawingService = new DrawingService(pluginInterface, configuration.DrawHelper, log);
         this.drawCanvas = new DrawCanvas(drawingService, configuration, objectTable, clientState, targetManager, gameGui, positionalService, rotationManager);
         this.updateCheckerService = new UpdateCheckerService(PluginVersion, notificationManager, log);
-        this.configWindow = new ConfigWindow(configuration, SaveConfiguration, updateCheckerService, textureProvider, rmiWalkHookService);
+        this.configWindow = new ConfigWindow(configuration, SaveConfiguration, updateCheckerService, textureProvider, rmiWalkHookService, orbwalkerIpc, clientState);
         this.mainWindow = new MainWindow(configuration, SaveConfiguration, OpenConfigUI, OpenDebugUI, OpenAnalyticsUI, OpenTrainingUI, OpenChangelogUI, OpenOverlayUI, PluginVersion, rotationManager, textureProvider);
         var smartAoETab = new SmartAoETab(aoeTracker, drawCanvas, objectTable);
         this.debugWindow = new DebugWindow(debugService, configuration, timelineService, smartAoETab);
@@ -554,6 +557,7 @@ public sealed class Plugin : IDalamudPlugin
 
         // Core services (register both interface and concrete where interface exists)
         container.Register(configuration);
+        container.Register<IOrbwalkerIpc, OrbwalkerIpc>(orbwalkerIpc);
         container.Register<IActionTracker, ActionTracker>(actionTracker);
         container.Register<IActionService, ActionService>(actionService);
         container.Register<ICombatEventService, CombatEventService>(combatEventService);
@@ -893,6 +897,7 @@ public sealed class Plugin : IDalamudPlugin
         fightSummaryWindow?.Dispose();
         windowSystem.RemoveAllWindows();
         olympusIpc.Dispose();
+        orbwalkerIpc.Dispose();
         partyCoordinationIpc?.Dispose();
         fflogsService?.Dispose();
         telemetryService.Dispose();

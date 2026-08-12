@@ -7,6 +7,7 @@ using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.ClientState.Party;
 using Dalamud.Plugin.Services;
 using Olympus.Data;
+using Olympus.Ipc;
 using Olympus.Rotation.Common;
 using Olympus.Rotation.Common.Helpers;
 using Olympus.Rotation.Common.Scheduling;
@@ -26,7 +27,7 @@ namespace Olympus.Rotation.Base;
 /// </summary>
 /// <typeparam name="TContext">The job-specific context type.</typeparam>
 /// <typeparam name="TModule">The job-specific module interface type.</typeparam>
-public abstract class BaseRotation<TContext, TModule> : IRotation, IDisposable
+public abstract class BaseRotation<TContext, TModule> : IRotation, IDisposable, IOrbwalkerCastIntegration
     where TContext : IRotationContext
     where TModule : IRotationModule<TContext>
 {
@@ -90,6 +91,11 @@ public abstract class BaseRotation<TContext, TModule> : IRotation, IDisposable
     /// <c>CountdownRemaining</c> each frame. Null when the service is not registered.
     /// </summary>
     protected readonly Olympus.Services.Pull.IPullIntentService? PullIntentService;
+
+    /// <summary>
+    /// Optional Orbwalker IPC. Attached by <see cref="RotationFactory"/> after construction.
+    /// </summary>
+    protected IOrbwalkerIpc? OrbwalkerIpc { get; private set; }
 
     #endregion
 
@@ -232,8 +238,13 @@ public abstract class BaseRotation<TContext, TModule> : IRotation, IDisposable
         // Update MP forecast service with current state
         UpdateMpForecast(player);
 
-        // Movement detection
+        // Movement detection (raw position / grace). Cast gating may ignore this when Orbwalker covers the job.
         var (isMoving, _) = UpdateMovement(player);
+        var orbwalkerActive = OrbwalkerIpc?.IsActiveForJob(player.ClassJob.RowId) == true;
+        var movementBlocksHardcasts = OrbwalkerCastGate.ShouldBlockHardcasts(
+            isMoving,
+            Configuration.EnableOrbwalkerIntegration,
+            orbwalkerActive);
 
         // Combat tracking — also treat auto-attack as combat if enabled
         var inCombat = (player.StatusFlags & StatusFlags.InCombat) != 0;
@@ -250,15 +261,18 @@ public abstract class BaseRotation<TContext, TModule> : IRotation, IDisposable
             TrackGcdState(player);
         }
 
-        // Create context for modules
-        var context = CreateContext(player, inCombat, isMoving);
+        // Create context for modules — pass cast-gate flag so hardcasts are allowed under Orbwalker
+        var context = CreateContext(player, inCombat, movementBlocksHardcasts);
 
         // Update debug state from all modules (skip if debug window closed for performance)
         UpdateModuleDebugStates(context);
 
         // Execute modules in priority order
-        ExecuteModules(context, isMoving, inCombat);
+        ExecuteModules(context, movementBlocksHardcasts, inCombat);
     }
+
+    /// <inheritdoc />
+    void IOrbwalkerCastIntegration.AttachOrbwalkerIpc(IOrbwalkerIpc? ipc) => OrbwalkerIpc = ipc;
 
     /// <summary>
     /// Updates MP forecast service with current player MP state.

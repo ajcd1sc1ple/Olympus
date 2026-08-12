@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using Dalamud.Plugin.Services;
+using Olympus.Ipc;
 using Olympus.Services;
 
 namespace Olympus.Rotation;
@@ -150,12 +151,23 @@ public sealed class RotationFactory
 
             if (canResolve)
             {
-                return (IRotation)constructor.Invoke(args);
+                var rotation = (IRotation)constructor.Invoke(args)!;
+                AttachOrbwalkerIfNeeded(rotation);
+                return rotation;
             }
         }
 
         _log.Warning("No suitable constructor found for rotation {Type}", rotationType.Name);
         return null;
+    }
+
+    private void AttachOrbwalkerIfNeeded(IRotation rotation)
+    {
+        if (rotation is IOrbwalkerCastIntegration orbwalkerConsumer
+            && _services.TryGet<IOrbwalkerIpc>(out var orbwalkerIpc))
+        {
+            orbwalkerConsumer.AttachOrbwalkerIpc(orbwalkerIpc);
+        }
     }
 
     /// <summary>
