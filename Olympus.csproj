@@ -2,6 +2,7 @@
 
   <PropertyGroup>
     <Version>4.17.2</Version>
+    <AssemblyName>MyOlympus</AssemblyName>
     <DalamudLibPath>$(AppData)\XIVLauncher\addon\Hooks\dev\</DalamudLibPath>
   </PropertyGroup>
 
@@ -41,6 +42,14 @@
 
   <ItemGroup>
     <PackageReference Include="Pictomancy" Version="0.0.2" />
+  </ItemGroup>
+
+  <!-- Manifest must match AssemblyName (MyOlympus) for Dalamud -->
+  <ItemGroup>
+    <Content Include="MyOlympus.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
   </ItemGroup>
 
 </Project>

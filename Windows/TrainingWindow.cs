@@ -27,7 +27,7 @@ public sealed class TrainingWindow : Window
         Configuration configuration,
         DecisionValidationService? decisionValidationService = null,
         SpacedRepetitionService? spacedRepetitionService = null)
-        : base("Olympus Training", ImGuiWindowFlags.NoSavedSettings)
+        : base("MyOlympus Training", ImGuiWindowFlags.NoSavedSettings)
     {
         this.trainingService = trainingService;
         this.configuration = configuration;

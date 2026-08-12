@@ -24,7 +24,7 @@ public sealed class AnalyticsWindow : Window
     private readonly IClientState? clientState;
 
     public AnalyticsWindow(IPerformanceTracker performanceTracker, Configuration configuration, Action saveConfiguration, IFFlogsService? fflogsService = null, IFightSummaryService? fightSummaryService = null, IClientState? clientState = null)
-        : base("Olympus Analytics", ImGuiWindowFlags.NoSavedSettings)
+        : base("MyOlympus Analytics", ImGuiWindowFlags.NoSavedSettings)
     {
         this.performanceTracker = performanceTracker;
         this.configuration = configuration;

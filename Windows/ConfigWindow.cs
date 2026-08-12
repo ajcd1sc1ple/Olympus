@@ -78,7 +78,7 @@ public sealed class ConfigWindow : Window
     private readonly DebugDisplaySection debugDisplaySection;
 
     public ConfigWindow(Configuration configuration, Action saveConfiguration, UpdateCheckerService updateCheckerService, ITextureProvider textureProvider, IRMIWalkHookService hookService)
-        : base(Loc.T(LocalizedStrings.Config.WindowTitle, "Olympus Settings"), ImGuiWindowFlags.NoCollapse)
+        : base(Loc.T(LocalizedStrings.Config.WindowTitle, "MyOlympus Settings"), ImGuiWindowFlags.NoCollapse)
     {
         this.configuration = configuration;
         this.saveConfiguration = saveConfiguration;

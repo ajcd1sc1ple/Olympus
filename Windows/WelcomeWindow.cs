@@ -25,7 +25,7 @@ public sealed class WelcomeWindow : Window
     private int _page;
 
     public WelcomeWindow(Configuration configuration, Action saveConfiguration, Action openSettings)
-        : base("Welcome to Olympus!", ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.AlwaysAutoResize)
+        : base("Welcome to MyOlympus!", ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.AlwaysAutoResize)
     {
         _configuration = configuration;
         _saveConfiguration = saveConfiguration;
@@ -53,7 +53,7 @@ public sealed class WelcomeWindow : Window
 
     private void DrawWelcomePage()
     {
-        ImGui.TextColored(GoldColor, Loc.T(LocalizedStrings.Welcome.Title, "Welcome to Olympus!"));
+        ImGui.TextColored(GoldColor, Loc.T(LocalizedStrings.Welcome.Title, "Welcome to MyOlympus!"));
         ImGui.Spacing();
         ImGui.TextWrapped(Loc.T(
             LocalizedStrings.Welcome.Subtitle,
@@ -98,7 +98,7 @@ public sealed class WelcomeWindow : Window
 
         // Enable / Disable toggle
         var enabled = _configuration.Enabled;
-        if (ImGui.Checkbox(Loc.T(LocalizedStrings.Welcome.EnableRotation, "Enable Olympus"), ref enabled))
+        if (ImGui.Checkbox(Loc.T(LocalizedStrings.Welcome.EnableRotation, "Enable MyOlympus"), ref enabled))
         {
             _configuration.Enabled = enabled;
             _saveConfiguration();
@@ -153,7 +153,7 @@ public sealed class WelcomeWindow : Window
         ImGui.Spacing();
 
         ImGui.BulletText(Loc.T(LocalizedStrings.Welcome.TipCommand,
-            "Use /olympus to toggle the main window at any time."));
+            "Use /myolympus to toggle the main window at any time."));
         ImGui.BulletText(Loc.T(LocalizedStrings.Welcome.TipOverlay,
             "The overlay shows your next queued action in real time."));
         ImGui.BulletText(Loc.T(LocalizedStrings.Welcome.TipSettings,

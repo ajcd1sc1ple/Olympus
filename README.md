@@ -96,26 +96,23 @@ Transform from passenger to pilot with intelligent coaching:
 
 ## Installation
 
-### Custom Repository (Recommended)
-1. Open Dalamud Plugin Installer in-game
-2. Go to **Settings** (gear icon) → **Experimental**
-3. Under "Custom Plugin Repositories", add:
-   ```
-   https://raw.githubusercontent.com/RoseOfficial/Olympus/main/repo.json
-   ```
-4. Click **Save and Close**
-5. Search for "Olympus" and install
+### Dev Plugin (this fork — MyOlympus)
+1. Build the project (output contains `MyOlympus.dll` + `MyOlympus.json`)
+2. In-game: `/xlsettings` → **Experimental** → **Dev Plugin Locations**
+3. Add the build output folder
+4. `/xlplugins` → enable **MyOlympus**
 
-Updates are delivered automatically.
+This fork uses InternalName `MyOlympus` so it can sit beside the official Olympus plugin without colliding.
 
-### Manual Installation
-1. Download `Olympus.zip` from [Releases](https://github.com/RoseOfficial/Olympus/releases)
-2. Extract to `%APPDATA%\XIVLauncher\installedPlugins\Olympus\`
-3. Reload plugins or restart the game
+### Official Olympus (upstream)
+Use the RoseOfficial custom repo if you want the stock plugin instead:
+```
+https://raw.githubusercontent.com/RoseOfficial/Olympus/main/repo.json
+```
 
 ## Quick Start
 
-1. `/olympus` - Open the main window
+1. `/myolympus` - Open the main window
 2. Click **Enable** to activate
 3. Enter combat on any supported job
 4. Open **Training** to learn as you play
@@ -126,9 +123,9 @@ Updates are delivered automatically.
 
 | Command | Description |
 |---------|-------------|
-| `/olympus` | Open main window |
-| `/olympus toggle` | Enable/disable rotation |
-| `/olympus debug` | Open debug window |
+| `/myolympus` | Open main window |
+| `/myolympus toggle` | Enable/disable rotation |
+| `/myolympus debug` | Open debug window |
 
 ## Job Modules
 

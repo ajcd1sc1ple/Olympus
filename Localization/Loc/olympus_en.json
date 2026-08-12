@@ -21,7 +21,7 @@
   "ui.main.positional_immune": "Immune",
   "ui.main.preset": "Preset:",
 
-  "config.window_title": "Olympus Settings",
+  "config.window_title": "MyOlympus Settings",
   "config.join_discord": "Join Discord",
   "config.enable_rotation": "Enable Rotation",
   "config.enable_rotation_desc": "When enabled, the rotation will automatically cast spells.",
@@ -1325,7 +1325,7 @@
   "config.job.rdm.dash_min_hp_percent_desc": "Corps-a-corps and Engagement won't fire below this HP threshold.",
   "config.job.rdm.dash_min_hp_percent_desc2": "Prevents dashing into boss mechanics when you're already hurt.",
 
-  "analytics.window_title": "Olympus Analytics",
+  "analytics.window_title": "MyOlympus Analytics",
   "analytics.realtime": "Realtime",
   "analytics.history": "History",
   "analytics.fight_summary": "Fight Summary",
@@ -1337,7 +1337,7 @@
   "analytics.healing_done": "Healing Done",
   "analytics.overheal": "Overheal",
 
-  "training.window_title": "Olympus Training",
+  "training.window_title": "MyOlympus Training",
   "training.live_coaching": "Live Coaching",
   "training.lessons": "Lessons",
   "training.quizzes": "Quizzes",
@@ -1377,7 +1377,7 @@
   "ui.helpers.job_header_format": "{0} ({1}) Settings",
   "ui.helpers.settings": "Settings",
 
-  "analytics.window_title": "Olympus Analytics",
+  "analytics.window_title": "MyOlympus Analytics",
   "analytics.tab.realtime": "Realtime",
   "analytics.tab.fight_summary": "Fight Summary",
   "analytics.tab.history": "History",
@@ -1519,7 +1519,7 @@
   "analytics.character_found": "Character found! FFLogs ID: {0}",
   "analytics.character_not_found": "Character not found.",
 
-  "training.window_title": "Olympus Training",
+  "training.window_title": "MyOlympus Training",
   "training.tab.live_coaching": "Live Coaching",
   "training.tab.recommended": "Recommended",
   "training.tab.lessons": "Lessons",
@@ -1770,7 +1770,7 @@
   "training.hint_dismiss": "Dismiss",
   "training.hint_esc_to_close_all": "ESC to close all",
 
-  "debug.window_title": "Olympus Debug",
+  "debug.window_title": "MyOlympus Debug",
   "debug.section_visibility": "Section Visibility",
   "debug.section_visibility_desc": "Choose which sections are visible within each Debug window tab.",
 
@@ -2443,7 +2443,7 @@
   "ui.overlay.healing": "Healing",
   "ui.overlay.damage": "Damage",
 
-  "ui.welcome.title": "Welcome to Olympus!",
+  "ui.welcome.title": "Welcome to MyOlympus!",
   "ui.welcome.subtitle": "Your intelligent rotation assistant for all 21 FFXIV combat jobs.",
   "ui.welcome.page": "{0} / {1}",
   "ui.welcome.feature_healing": "Automates healing, resurrection, and defensive cooldowns",
@@ -2452,13 +2452,13 @@
   "ui.welcome.feature_coordination": "Party coordination across multiple Olympus instances",
   "ui.welcome.setup_title": "Quick Setup",
   "ui.welcome.setup_note": "You can adjust these anytime in Settings.",
-  "ui.welcome.enable_rotation": "Enable Olympus",
+  "ui.welcome.enable_rotation": "Enable MyOlympus",
   "ui.welcome.enable_rotation_desc": "Allow Olympus to automatically execute abilities.",
   "ui.welcome.preset_label": "Behavior Style:",
   "ui.welcome.preset_desc": "Choose how aggressively Olympus should act.",
   "ui.welcome.ready_title": "You're All Set!",
   "ui.welcome.ready_subtitle": "A few tips to help you get started:",
-  "ui.welcome.tip_command": "Use /olympus to toggle the main window at any time.",
+  "ui.welcome.tip_command": "Use /myolympus to toggle the main window at any time.",
   "ui.welcome.tip_overlay": "The overlay shows your next queued action in real time.",
   "ui.welcome.tip_settings": "Visit Settings to fine-tune behavior for each job.",
   "ui.welcome.open_settings": "Open Settings",
