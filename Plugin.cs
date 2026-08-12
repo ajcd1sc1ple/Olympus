@@ -506,7 +506,7 @@ public sealed class Plugin : IDalamudPlugin
 
         this.commandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
         {
-            HelpMessage = "Open MyOlympus window. Subcommands: toggle | debug | hardcast [on|off|toggle]"
+            HelpMessage = "Open MyOlympus window. Subcommands: toggle | debug | healing [on|off|toggle] | hardcast [on|off|toggle]"
         });
 
         this.framework.Update += OnFrameworkUpdate;
@@ -673,10 +673,48 @@ public sealed class Plugin : IDalamudPlugin
                 HandleHardcastCommand(subArg);
                 break;
 
+            case "healing":
+            case "heal":
+                HandleHealingCommand(subArg);
+                break;
+
             default:
                 mainWindow.Toggle();
                 break;
         }
+    }
+
+    private void HandleHealingCommand(string subArg)
+    {
+        var current = configuration.EnableHealing;
+        bool newValue;
+
+        switch (subArg)
+        {
+            case "on":
+            case "enable":
+            case "true":
+                newValue = true;
+                break;
+            case "off":
+            case "disable":
+            case "false":
+                newValue = false;
+                break;
+            case "":
+            case "toggle":
+                newValue = !current;
+                break;
+            default:
+                chatGui.Print($"Usage: /myolympus healing [on|off|toggle]. Currently {(current ? "on" : "off")}.");
+                return;
+        }
+
+        configuration.EnableHealing = newValue;
+        SaveConfiguration();
+        var state = newValue ? "enabled" : "disabled";
+        chatGui.Print($"MyOlympus healing {state}.");
+        log.Info($"Healing {state}");
     }
 
     private void HandleHardcastCommand(string subArg)

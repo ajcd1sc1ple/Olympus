@@ -126,6 +126,8 @@ https://raw.githubusercontent.com/RoseOfficial/Olympus/main/repo.json
 | `/myolympus` | Open main window |
 | `/myolympus toggle` | Enable/disable rotation |
 | `/myolympus debug` | Open debug window |
+| `/myolympus healing [on\|off\|toggle]` | Enable/disable automatic healing |
+| `/myolympus hardcast [on\|off\|toggle]` | Allow hardcast raise |
 
 ## Job Modules
 
