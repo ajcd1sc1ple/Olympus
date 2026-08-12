@@ -16,6 +16,13 @@ public sealed class TimelineConfig
     public bool EnableTimelinePredictions { get; set; } = true;
 
     /// <summary>
+    /// When true, prefer BossMod / BossMod Reborn timeline IPC (raidwide / tankbuster /
+    /// downtime) when an encounter module is active, merged with embedded Cactbot timelines.
+    /// Default on — same approach as Rotation Solver Reborn.
+    /// </summary>
+    public bool EnableBossModTimelineIntegration { get; set; } = true;
+
+    /// <summary>
     /// Minimum timeline confidence required to trust predictions.
     /// Timeline confidence decays over time since the last sync point.
     /// Valid range: 0.5 to 1.0.

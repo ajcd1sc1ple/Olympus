@@ -38,6 +38,16 @@ public sealed class TimelineSection
 
         ConfigUIHelpers.BeginIndent();
 
+        ConfigUIHelpers.Toggle(
+            Loc.T(LocalizedStrings.Timeline.EnableBossModIntegration, "Use BossMod timeline (RSR-style)"),
+            () => config.Timeline.EnableBossModTimelineIntegration,
+            v => config.Timeline.EnableBossModTimelineIntegration = v,
+            Loc.T(LocalizedStrings.Timeline.EnableBossModIntegrationDesc,
+                "When BossMod Reborn has an active encounter module, use its raidwide/tankbuster/downtime timing and merge with embedded Cactbot timelines. Prefer this for coverage beyond bundled .txt files."),
+            save);
+
+        ConfigUIHelpers.Spacing();
+
         config.Timeline.TimelineConfidenceThreshold = ConfigUIHelpers.ThresholdSliderSmall(
             Loc.T(LocalizedStrings.Timeline.ConfidenceThreshold, "Confidence Threshold"),
             config.Timeline.TimelineConfidenceThreshold, 50f, 100f,

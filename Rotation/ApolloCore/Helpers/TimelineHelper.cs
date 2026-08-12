@@ -1,3 +1,4 @@
+using System;
 using Olympus.Services.Prediction;
 using Olympus.Timeline;
 using Olympus.Timeline.Models;
@@ -237,7 +238,13 @@ public static class TimelineHelper
         var fightName = timelineService.FightName;
 
         if (timelineService.Confidence >= config.Timeline.TimelineConfidenceThreshold)
-            return $"{fightName} [{confidencePercent:F0}%]";
+        {
+            var source = timelineService.NextRaidwide?.Name.StartsWith("BossMod", StringComparison.Ordinal) == true
+                || timelineService.NextTankBuster?.Name.StartsWith("BossMod", StringComparison.Ordinal) == true
+                ? "BossMod"
+                : "Cactbot";
+            return $"{fightName} [{confidencePercent:F0}% · {source}]";
+        }
 
         return $"{fightName} [Low: {confidencePercent:F0}%]";
     }

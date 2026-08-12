@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using Dalamud.Plugin.Services;
+using Olympus.Ipc;
 using Olympus.Services;
 using Olympus.Timeline.Models;
 using Olympus.Timeline.Parser;
@@ -12,12 +13,15 @@ namespace Olympus.Timeline;
 /// <summary>
 /// Runtime service for fight timeline tracking and mechanic prediction.
 /// Maintains timeline state, syncs to game events, and provides predictions to rotation modules.
+/// Merges embedded Cactbot timelines with BossMod Reborn timeline IPC when available.
 /// </summary>
 public sealed class TimelineService : ITimelineService, IDisposable
 {
     private readonly IPluginLog log;
     private readonly ICombatEventService combatEventService;
+    private readonly Configuration configuration;
     private readonly CactbotTimelineParser parser;
+    private IBossModTimelineIpc? bossModTimeline;
 
     private FightTimeline? loadedTimeline;
     private TimelineState? state;
@@ -26,6 +30,7 @@ public sealed class TimelineService : ITimelineService, IDisposable
     private MechanicPrediction? cachedNextRaidwide;
     private MechanicPrediction? cachedNextTankBuster;
     private float lastPredictionUpdateTime;
+    private DateTime lastBossModOnlyRefreshUtc = DateTime.MinValue;
     private const float PredictionCacheRefreshInterval = 0.25f; // Refresh predictions every 250ms
 
     // Simulation state
@@ -33,16 +38,40 @@ public sealed class TimelineService : ITimelineService, IDisposable
     private float simulationStartTime;
     private DateTime simulationStartRealTime;
 
-    public TimelineService(IPluginLog log, ICombatEventService combatEventService)
+    public TimelineService(
+        IPluginLog log,
+        ICombatEventService combatEventService,
+        Configuration configuration,
+        IBossModTimelineIpc? bossModTimeline = null)
     {
         this.log = log;
         this.combatEventService = combatEventService;
+        this.configuration = configuration;
+        this.bossModTimeline = bossModTimeline;
         this.parser = new CactbotTimelineParser();
     }
 
+    /// <summary>Optional late bind when IPC is constructed after this service.</summary>
+    public void AttachBossModTimeline(IBossModTimelineIpc? ipc) => bossModTimeline = ipc;
+
     #region ITimelineService Properties
 
-    public bool IsActive => state != null && loadedTimeline != null && (combatEventService.IsInCombat || isSimulating);
+    public bool IsActive
+    {
+        get
+        {
+            if (isSimulating)
+                return loadedTimeline != null && state != null;
+
+            if (!combatEventService.IsInCombat)
+                return false;
+
+            if (loadedTimeline != null && state != null)
+                return true;
+
+            return IsBossModTimelineLive();
+        }
+    }
 
     public bool IsSimulating => isSimulating;
 
@@ -50,9 +79,30 @@ public sealed class TimelineService : ITimelineService, IDisposable
 
     public string CurrentPhase => state?.CurrentPhase ?? string.Empty;
 
-    public string FightName => loadedTimeline?.Name ?? string.Empty;
+    public string FightName
+    {
+        get
+        {
+            if (!string.IsNullOrEmpty(loadedTimeline?.Name))
+                return loadedTimeline!.Name;
 
-    public float Confidence => state?.Confidence ?? 0f;
+            if (IsBossModTimelineLive())
+                return bossModTimeline?.ActiveModuleName() ?? "BossMod";
+
+            return string.Empty;
+        }
+    }
+
+    public float Confidence
+    {
+        get
+        {
+            var local = state?.Confidence ?? 0f;
+            if (IsBossModTimelineLive())
+                return Math.Max(local, BossModTimelineMerge.BossModConfidence);
+            return local;
+        }
+    }
 
     public MechanicPrediction? NextRaidwide => IsActive ? cachedNextRaidwide : null;
 
@@ -64,8 +114,12 @@ public sealed class TimelineService : ITimelineService, IDisposable
 
     public void Update()
     {
+        // BossMod-only path: no embedded Cactbot timeline for this zone.
         if (loadedTimeline == null || state == null)
+        {
+            UpdateBossModOnly();
             return;
+        }
 
         float currentTime;
 
@@ -111,7 +165,16 @@ public sealed class TimelineService : ITimelineService, IDisposable
 
     public MechanicPrediction? GetNextMechanic(TimelineEntryType type)
     {
-        if (!IsActive || state == null || loadedTimeline == null)
+        if (!IsActive)
+            return null;
+
+        // Raidwide / TB come from the merged cache (BossMod + Cactbot).
+        if (type == TimelineEntryType.Raidwide)
+            return cachedNextRaidwide;
+        if (type == TimelineEntryType.TankBuster)
+            return cachedNextTankBuster;
+
+        if (state == null || loadedTimeline == null)
             return null;
 
         var currentTime = state.CurrentTime;
@@ -141,9 +204,19 @@ public sealed class TimelineService : ITimelineService, IDisposable
 
     public float? SecondsUntilNextUntargetablePhase()
     {
-        if (!IsActive || state == null || loadedTimeline == null)
-            return null;
-        return FindSecondsUntilNextUntargetablePhase(loadedTimeline, state.CurrentTime);
+        float? cactbot = null;
+        if (state != null && loadedTimeline != null && (combatEventService.IsInCombat || isSimulating))
+            cactbot = FindSecondsUntilNextUntargetablePhase(loadedTimeline, state.CurrentTime);
+
+        float? bossMod = null;
+        if (IsBossModTimelineLive())
+            bossMod = bossModTimeline?.NextDowntimeIn();
+
+        if (cactbot is null)
+            return bossMod;
+        if (bossMod is null)
+            return cactbot;
+        return Math.Min(cactbot.Value, bossMod.Value);
     }
 
     /// <summary>
@@ -308,15 +381,33 @@ public sealed class TimelineService : ITimelineService, IDisposable
 
     public IReadOnlyList<MechanicPrediction> GetUpcomingMechanics(float windowSeconds)
     {
-        if (!IsActive || state == null || loadedTimeline == null)
+        if (!IsActive)
             return Array.Empty<MechanicPrediction>();
 
+        // BossMod-only (no embedded timeline): surface cached raidwide/TB.
+        if (state == null || loadedTimeline == null)
+        {
+            var bossOnly = new List<MechanicPrediction>(2);
+            if (cachedNextRaidwide is { } rw && rw.SecondsUntil <= windowSeconds)
+                bossOnly.Add(rw);
+            if (cachedNextTankBuster is { } tb && tb.SecondsUntil <= windowSeconds)
+                bossOnly.Add(tb);
+            bossOnly.Sort((a, b) => a.SecondsUntil.CompareTo(b.SecondsUntil));
+            return bossOnly;
+        }
+
         var currentTime = state.CurrentTime;
-        var confidence = state.Confidence;
+        var confidence = Confidence;
         var endTime = currentTime + windowSeconds;
 
         var startIndex = loadedTimeline.FindFirstEntryAtOrAfter(currentTime);
         var results = new List<MechanicPrediction>();
+
+        // Prefer merged cache for RW/TB so BossMod predictions appear in the debug list.
+        if (cachedNextRaidwide is { } cachedRw && cachedRw.SecondsUntil <= windowSeconds)
+            results.Add(cachedRw);
+        if (cachedNextTankBuster is { } cachedTb && cachedTb.SecondsUntil <= windowSeconds)
+            results.Add(cachedTb);
 
         for (var i = startIndex; i < loadedTimeline.Entries.Length; i++)
         {
@@ -328,9 +419,12 @@ public sealed class TimelineService : ITimelineService, IDisposable
             if (entry.IsHidden)
                 continue;
 
+            // RW/TB already added from merged cache.
+            if (entry.EntryType is TimelineEntryType.Raidwide or TimelineEntryType.TankBuster)
+                continue;
+
             // Only include combat-relevant mechanics
-            if (entry.EntryType is TimelineEntryType.Raidwide or TimelineEntryType.TankBuster
-                or TimelineEntryType.Stack or TimelineEntryType.Spread
+            if (entry.EntryType is TimelineEntryType.Stack or TimelineEntryType.Spread
                 or TimelineEntryType.Adds or TimelineEntryType.Enrage
                 or TimelineEntryType.Ability)
             {
@@ -344,6 +438,7 @@ public sealed class TimelineService : ITimelineService, IDisposable
             }
         }
 
+        results.Sort((a, b) => a.SecondsUntil.CompareTo(b.SecondsUntil));
         return results;
     }
 
@@ -390,9 +485,52 @@ public sealed class TimelineService : ITimelineService, IDisposable
 
     private void RefreshPredictionCache()
     {
-        cachedNextRaidwide = GetNextMechanicInternal(TimelineEntryType.Raidwide);
-        cachedNextTankBuster = GetNextMechanicInternal(TimelineEntryType.TankBuster);
+        var cactbotRw = GetNextMechanicInternal(TimelineEntryType.Raidwide);
+        var cactbotTb = GetNextMechanicInternal(TimelineEntryType.TankBuster);
+
+        if (IsBossModTimelineEnabled() && bossModTimeline is { } ipc && ipc.Available && ipc.HasActiveModule())
+        {
+            cachedNextRaidwide = BossModTimelineMerge.MergeRaidwide(
+                ipc.NextRaidwideIn(),
+                ipc.NextRaidwideDamageIn(),
+                cactbotRw);
+            cachedNextTankBuster = BossModTimelineMerge.MergeTankBuster(
+                ipc.NextTankbusterIn(),
+                ipc.NextTankbusterDamageIn(),
+                cactbotTb);
+            return;
+        }
+
+        cachedNextRaidwide = cactbotRw;
+        cachedNextTankBuster = cactbotTb;
     }
+
+    private void UpdateBossModOnly()
+    {
+        if (!combatEventService.IsInCombat || !IsBossModTimelineLive())
+        {
+            if (cachedNextRaidwide != null || cachedNextTankBuster != null)
+                ClearPredictionCache();
+            return;
+        }
+
+        var now = DateTime.UtcNow;
+        if ((now - lastBossModOnlyRefreshUtc).TotalSeconds < PredictionCacheRefreshInterval)
+            return;
+
+        lastBossModOnlyRefreshUtc = now;
+        RefreshPredictionCache();
+    }
+
+    private bool IsBossModTimelineEnabled() =>
+        configuration.Timeline.EnableTimelinePredictions
+        && configuration.Timeline.EnableBossModTimelineIntegration;
+
+    private bool IsBossModTimelineLive() =>
+        IsBossModTimelineEnabled()
+        && bossModTimeline is { } ipc
+        && ipc.Available
+        && ipc.HasActiveModule();
 
     private MechanicPrediction? GetNextMechanicInternal(TimelineEntryType type)
     {
@@ -428,6 +566,7 @@ public sealed class TimelineService : ITimelineService, IDisposable
         cachedNextRaidwide = null;
         cachedNextTankBuster = null;
         lastPredictionUpdateTime = 0f;
+        lastBossModOnlyRefreshUtc = DateTime.MinValue;
     }
 
     private static string? LoadEmbeddedResource(string resourceName)

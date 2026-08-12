@@ -1002,6 +1002,8 @@ public static class LocalizedStrings
         public const string SectionHeader = "config.timeline.section_header";
         public const string EnablePredictions = "config.timeline.enable_predictions";
         public const string EnablePredictionsDesc = "config.timeline.enable_predictions_desc";
+        public const string EnableBossModIntegration = "config.timeline.enable_bossmod_integration";
+        public const string EnableBossModIntegrationDesc = "config.timeline.enable_bossmod_integration_desc";
         public const string ConfidenceThreshold = "config.timeline.confidence_threshold";
         public const string ConfidenceThresholdDesc = "config.timeline.confidence_threshold_desc";
         public const string EnableMechanicAwareCasting = "config.timeline.enable_mechanic_aware_casting";

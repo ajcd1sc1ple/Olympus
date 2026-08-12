@@ -138,6 +138,7 @@ public sealed class Plugin : IDalamudPlugin
 
     private readonly OlympusIpc olympusIpc;
     private readonly OrbwalkerIpc orbwalkerIpc;
+    private readonly BossModTimelineIpc bossModTimelineIpc;
     private readonly Olympus.Services.AutoAttack.AutoAttackService autoAttackService;
     private readonly Olympus.Services.Movement.BossModPresence bossModPresence;
     private readonly UpdateCheckerService updateCheckerService;
@@ -255,7 +256,8 @@ public sealed class Plugin : IDalamudPlugin
         this.debuffDetectionService = new DebuffDetectionService(dataManager);
 
         // Timeline service for fight-aware predictions (must precede TankCooldownService)
-        this.timelineService = new TimelineService(log, combatEventService);
+        this.bossModTimelineIpc = new BossModTimelineIpc(pluginInterface, log);
+        this.timelineService = new TimelineService(log, combatEventService, configuration, bossModTimelineIpc);
         this.onAbilityUsedHandler = (sourceId, actionId) => timelineService.OnAbilityUsed(sourceId, actionId);
         combatEventService.OnAbilityUsed += this.onAbilityUsedHandler;
 
@@ -951,6 +953,7 @@ public sealed class Plugin : IDalamudPlugin
         windowSystem.RemoveAllWindows();
         olympusIpc.Dispose();
         orbwalkerIpc.Dispose();
+        bossModTimelineIpc.Dispose();
         partyCoordinationIpc?.Dispose();
         fflogsService?.Dispose();
         telemetryService.Dispose();
