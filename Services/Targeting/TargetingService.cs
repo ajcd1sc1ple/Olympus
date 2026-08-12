@@ -410,7 +410,7 @@ public sealed class TargetingService : ITargetingService
             if (obj.ObjectKind != ObjectKind.BattleNpc) continue;
             if (!obj.IsTargetable) continue;
             if (obj.IsDead) continue;
-            if (obj.YalmDistanceX > 15) continue;
+            if (obj.CurrentDistance > 15) continue;
             if (obj is not IBattleNpc npc) continue;
             if ((byte)npc.BattleNpcKind != Olympus.Compat.BattleNpcKinds.Combatant && npc.SubKind != 0) continue;
             if (_configuration.Targeting.EnableInvulnerabilityFiltering &&
@@ -688,7 +688,7 @@ public sealed class TargetingService : ITargetingService
                 continue;
 
             // Quick yalm-based range pre-filter (generous buffer for large hitboxes)
-            if (obj.YalmDistanceX > maxRangeYalms + (int)Math.Ceiling(obj.HitboxRadius))
+            if (obj.CurrentDistance > maxRangeYalms + (int)Math.Ceiling(obj.HitboxRadius))
                 continue;
 
             // Type cast
