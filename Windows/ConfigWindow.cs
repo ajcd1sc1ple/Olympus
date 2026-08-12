@@ -569,6 +569,7 @@ public sealed class ConfigWindow : Window
             configuration.ActivePreset        = imported.ActivePreset;
             configuration.MovementTolerance   = imported.MovementTolerance;
             configuration.EnableOnAutoAttack  = imported.EnableOnAutoAttack;
+            configuration.EnableAutoAttackUntilDead = imported.EnableAutoAttackUntilDead;
             configuration.EnableHealing       = imported.EnableHealing;
             configuration.EnableDamage        = imported.EnableDamage;
             configuration.EnableDoT           = imported.EnableDoT;

@@ -13,6 +13,7 @@ using Olympus.Rotation.Common.Helpers;
 using Olympus.Rotation.Common.Scheduling;
 using Olympus.Services;
 using Olympus.Services.Action;
+using Olympus.Services.AutoAttack;
 using Olympus.Services.Debuff;
 using Olympus.Services.Prediction;
 using Olympus.Services.Resource;
@@ -27,7 +28,7 @@ namespace Olympus.Rotation.Base;
 /// </summary>
 /// <typeparam name="TContext">The job-specific context type.</typeparam>
 /// <typeparam name="TModule">The job-specific module interface type.</typeparam>
-public abstract class BaseRotation<TContext, TModule> : IRotation, IDisposable, IOrbwalkerCastIntegration
+public abstract class BaseRotation<TContext, TModule> : IRotation, IDisposable, IOrbwalkerCastIntegration, IAutoAttackHoldIntegration
     where TContext : IRotationContext
     where TModule : IRotationModule<TContext>
 {
@@ -96,6 +97,11 @@ public abstract class BaseRotation<TContext, TModule> : IRotation, IDisposable, 
     /// Optional Orbwalker IPC. Attached by <see cref="RotationFactory"/> after construction.
     /// </summary>
     protected IOrbwalkerIpc? OrbwalkerIpc { get; private set; }
+
+    /// <summary>
+    /// Optional auto-attack hold service. Attached by <see cref="RotationFactory"/> after construction.
+    /// </summary>
+    protected IAutoAttackService? AutoAttackService { get; private set; }
 
     #endregion
 
@@ -275,6 +281,8 @@ public abstract class BaseRotation<TContext, TModule> : IRotation, IDisposable, 
         var inCombat = (player.StatusFlags & StatusFlags.InCombat) != 0;
         if (!inCombat && Configuration.EnableOnAutoAttack)
             inCombat = IsAutoAttacking();
+        if (!inCombat && AutoAttackService?.ShouldTreatAsInCombat == true)
+            inCombat = true;
         UpdateCombatState(inCombat);
 
         // Job-specific service updates
@@ -298,6 +306,9 @@ public abstract class BaseRotation<TContext, TModule> : IRotation, IDisposable, 
 
     /// <inheritdoc />
     void IOrbwalkerCastIntegration.AttachOrbwalkerIpc(IOrbwalkerIpc? ipc) => OrbwalkerIpc = ipc;
+
+    /// <inheritdoc />
+    void IAutoAttackHoldIntegration.AttachAutoAttackService(IAutoAttackService? service) => AutoAttackService = service;
 
     /// <summary>
     /// Updates MP forecast service with current player MP state.

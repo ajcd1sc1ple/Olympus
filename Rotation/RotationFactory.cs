@@ -5,6 +5,7 @@ using System.Reflection;
 using Dalamud.Plugin.Services;
 using Olympus.Ipc;
 using Olympus.Services;
+using Olympus.Services.AutoAttack;
 
 namespace Olympus.Rotation;
 
@@ -153,6 +154,7 @@ public sealed class RotationFactory
             {
                 var rotation = (IRotation)constructor.Invoke(args)!;
                 AttachOrbwalkerIfNeeded(rotation);
+                AttachAutoAttackIfNeeded(rotation);
                 return rotation;
             }
         }
@@ -167,6 +169,15 @@ public sealed class RotationFactory
             && _services.TryGet<IOrbwalkerIpc>(out var orbwalkerIpc))
         {
             orbwalkerConsumer.AttachOrbwalkerIpc(orbwalkerIpc);
+        }
+    }
+
+    private void AttachAutoAttackIfNeeded(IRotation rotation)
+    {
+        if (rotation is IAutoAttackHoldIntegration aaConsumer
+            && _services.TryGet<IAutoAttackService>(out var autoAttackService))
+        {
+            aaConsumer.AttachAutoAttackService(autoAttackService);
         }
     }
 

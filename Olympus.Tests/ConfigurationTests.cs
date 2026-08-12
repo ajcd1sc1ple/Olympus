@@ -361,5 +361,15 @@ public class ConfigurationTests
         Assert.False(config.Debug.DebugSectionVisibility.ContainsKey("CustomSection"));
     }
 
+    [Fact]
+    public void ResetToDefaults_ResetsAutoAttackUntilDead()
+    {
+        var config = new Configuration { EnableAutoAttackUntilDead = false };
+
+        config.ResetToDefaults();
+
+        Assert.True(config.EnableAutoAttackUntilDead);
+    }
+
     #endregion
 }

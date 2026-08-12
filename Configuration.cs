@@ -86,6 +86,13 @@ public sealed class Configuration : IPluginConfiguration
     public bool EnableOnAutoAttack { get; set; } = false;
 
     /// <summary>
+    /// When true, Olympus keeps game auto-attack on until the engaged enemy dies,
+    /// then turns it off. Prevents early AA drop when InCombat flickers or another
+    /// plugin clears autos before the kill. Default on.
+    /// </summary>
+    public bool EnableAutoAttackUntilDead { get; set; } = true;
+
+    /// <summary>
     /// When true, Olympus adds a smoothed estimate of network round-trip delay to the
     /// per-weave cost, tightening the weave window for high-latency players to prevent
     /// GCD clipping. Default off; opt in if you notice clipped GCDs on high-ping connections.
@@ -214,8 +221,12 @@ public sealed class Configuration : IPluginConfiguration
 
         // Reset general behavior
         EnableOnAutoAttack = false;
+        EnableAutoAttackUntilDead = true;
         EnablePingCompensation = false;
-        MovementTolerance = 0.1f;
+        EnableOrbwalkerIntegration = true;
+        EnablePostCancelHardcastHold = true;
+        PostCancelHardcastHoldSeconds = 0.4f;
+        MovementTolerance = 0.25f;
 
         // Reset master toggles
         EnableHealing = true;

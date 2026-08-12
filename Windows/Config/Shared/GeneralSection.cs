@@ -217,6 +217,16 @@ public sealed class GeneralSection
             ConfigUIHelpers.Spacing();
 
             ConfigUIHelpers.Toggle(
+                Loc.T(LocalizedStrings.General.EnableAutoAttackUntilDead, "Keep auto-attack until target dies"),
+                () => this.config.EnableAutoAttackUntilDead,
+                v => this.config.EnableAutoAttackUntilDead = v,
+                Loc.T(LocalizedStrings.General.EnableAutoAttackUntilDeadDesc,
+                    "Keeps auto-attack on while finishing an enemy, and only turns it off after that enemy dies. Stops early AA drop from combat-flag flicker. If BossMod Auto Autos still turns AA off early, disable that tweak in BossMod Action Tweaks."),
+                this.save);
+
+            ConfigUIHelpers.Spacing();
+
+            ConfigUIHelpers.Toggle(
                 Loc.T(LocalizedStrings.General.EnablePingCompensation, "Ping compensation (opt-in)"),
                 () => this.config.EnablePingCompensation,
                 v => this.config.EnablePingCompensation = v,

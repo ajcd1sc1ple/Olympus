@@ -138,6 +138,7 @@ public sealed class Plugin : IDalamudPlugin
 
     private readonly OlympusIpc olympusIpc;
     private readonly OrbwalkerIpc orbwalkerIpc;
+    private readonly Olympus.Services.AutoAttack.AutoAttackService autoAttackService;
     private readonly Olympus.Services.Movement.BossModPresence bossModPresence;
     private readonly UpdateCheckerService updateCheckerService;
 
@@ -372,6 +373,8 @@ public sealed class Plugin : IDalamudPlugin
             () => configuration.Movement);
         this.cameraAzimuthProbe = new Olympus.Services.Movement.CameraAzimuthProbe();
         this.orbwalkerIpc = new OrbwalkerIpc(pluginInterface, log);
+        this.autoAttackService = new Olympus.Services.AutoAttack.AutoAttackService(
+            configuration, targetManager, objectTable, log);
         this.bossModPresence = new Olympus.Services.Movement.BossModPresence(pluginInterface, log);
         this.trashAvoidanceService = new Olympus.Services.Movement.TrashAvoidanceService(
             rmiWalkHookService, enemyAoECastTracker, bossCombatDetector,
@@ -561,6 +564,7 @@ public sealed class Plugin : IDalamudPlugin
         // Core services (register both interface and concrete where interface exists)
         container.Register(configuration);
         container.Register<IOrbwalkerIpc, OrbwalkerIpc>(orbwalkerIpc);
+        container.Register<Olympus.Services.AutoAttack.IAutoAttackService, Olympus.Services.AutoAttack.AutoAttackService>(autoAttackService);
         container.Register<IActionTracker, ActionTracker>(actionTracker);
         container.Register<IActionService, ActionService>(actionService);
         container.Register<ICombatEventService, CombatEventService>(combatEventService);
@@ -842,6 +846,13 @@ public sealed class Plugin : IDalamudPlugin
             bossCombatDetector.Update();
             trashAvoidanceService.Update();
             interactDispatchService.Update();
+
+            // Keep auto-attack on until the engaged enemy dies. Runs even when the
+            // rotation is disabled so the hold latch clears cleanly.
+            {
+                var inCombatForAa = (localPlayer.StatusFlags & Dalamud.Game.ClientState.Objects.Enums.StatusFlags.InCombat) != 0;
+                autoAttackService.Update(inCombatForAa);
+            }
 
             if (!configuration.Enabled)
                 return;
