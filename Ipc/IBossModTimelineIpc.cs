@@ -43,5 +43,9 @@ public interface IBossModTimelineIpc
     /// Seconds until next downtime start (often untargetable).
     /// Returns null when unavailable / none scheduled.
     /// </summary>
+    /// <remarks>
+    /// Exposed for future use. Not wired into <c>SecondsUntilNextUntargetablePhase</c>
+    /// because BossMod DowntimeStart is broader than Cactbot untargetable markers.
+    /// </remarks>
     float? NextDowntimeIn();
 }

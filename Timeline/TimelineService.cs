@@ -204,19 +204,15 @@ public sealed class TimelineService : ITimelineService, IDisposable
 
     public float? SecondsUntilNextUntargetablePhase()
     {
-        float? cactbot = null;
-        if (state != null && loadedTimeline != null && (combatEventService.IsInCombat || isSimulating))
-            cactbot = FindSecondsUntilNextUntargetablePhase(loadedTimeline, state.CurrentTime);
-
-        float? bossMod = null;
-        if (IsBossModTimelineLive())
-            bossMod = bossModTimeline?.NextDowntimeIn();
-
-        if (cactbot is null)
-            return bossMod;
-        if (bossMod is null)
-            return cactbot;
-        return Math.Min(cactbot.Value, bossMod.Value);
+        // Use embedded Cactbot "--untargetable--" phase markers only.
+        // Do NOT merge BossMod Timeline.NextDowntimeIn here: BossMod's DowntimeStart
+        // hint is broader than true untargetable windows and was causing long
+        // pre-downtime holds / dumps (8–18s) across many jobs.
+        if (state == null || loadedTimeline == null)
+            return null;
+        if (!combatEventService.IsInCombat && !isSimulating)
+            return null;
+        return FindSecondsUntilNextUntargetablePhase(loadedTimeline, state.CurrentTime);
     }
 
     /// <summary>
