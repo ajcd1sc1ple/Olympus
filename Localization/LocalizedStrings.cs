@@ -151,6 +151,15 @@ public static class LocalizedStrings
         public const string StartOnAutoAttackDesc = "config.general.start_on_auto_attack_desc";
         public const string EnablePingCompensation = "config.general.enable_ping_compensation";
         public const string EnablePingCompensationDesc = "config.general.enable_ping_compensation_desc";
+        public const string EnableOrbwalkerIntegration = "config.general.enable_orbwalker_integration";
+        public const string EnableOrbwalkerIntegrationDesc = "config.general.enable_orbwalker_integration_desc";
+        public const string OrbwalkerHelp = "config.general.orbwalker_help";
+        public const string OrbwalkerStatusDisabled = "config.general.orbwalker_status_disabled";
+        public const string OrbwalkerStatusNotInstalled = "config.general.orbwalker_status_not_installed";
+        public const string OrbwalkerStatusPluginOff = "config.general.orbwalker_status_plugin_off";
+        public const string OrbwalkerStatusJobOff = "config.general.orbwalker_status_job_off";
+        public const string OrbwalkerStatusActive = "config.general.orbwalker_status_active";
+        public const string OrbwalkerStatusActiveNoForceStop = "config.general.orbwalker_status_active_no_force_stop";
     }
 
     /// <summary>Keys for window behavior settings.</summary>
