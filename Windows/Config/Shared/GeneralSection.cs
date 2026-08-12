@@ -243,7 +243,7 @@ public sealed class GeneralSection
 
         ImGui.TextDisabled(GetOrbwalkerStatusText());
         ImGui.TextDisabled(Loc.T(LocalizedStrings.General.OrbwalkerHelp,
-            "Install from puni.sh/plugin/Orbwalker. Enable the plugin and your job in /orbwalker. Prefer combat slidecast / force-stop mode."));
+            "Install from puni.sh/plugin/Orbwalker. Enable the plugin and your job in /orbwalker. Turn on combat force-stop / slidecast mode so Orbwalker locks you before each hardcast."));
     }
 
     private string GetOrbwalkerStatusText()

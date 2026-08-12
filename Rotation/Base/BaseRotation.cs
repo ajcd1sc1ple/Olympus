@@ -238,13 +238,16 @@ public abstract class BaseRotation<TContext, TModule> : IRotation, IDisposable, 
         // Update MP forecast service with current state
         UpdateMpForecast(player);
 
-        // Movement detection (raw position / grace). Cast gating may ignore this when Orbwalker covers the job.
+        // Movement detection (raw position / grace). Hardcasts while "moving" only if Orbwalker
+        // has already locked input — otherwise mid-slide UseAction gets cancelled immediately.
         var (isMoving, _) = UpdateMovement(player);
         var orbwalkerActive = OrbwalkerIpc?.IsActiveForJob(player.ClassJob.RowId) == true;
+        var orbwalkerLocked = OrbwalkerIpc?.MovementLocked() == true;
         var movementBlocksHardcasts = OrbwalkerCastGate.ShouldBlockHardcasts(
             isMoving,
             Configuration.EnableOrbwalkerIntegration,
-            orbwalkerActive);
+            orbwalkerActive,
+            orbwalkerLocked);
 
         // Combat tracking — also treat auto-attack as combat if enabled
         var inCombat = (player.StatusFlags & StatusFlags.InCombat) != 0;
