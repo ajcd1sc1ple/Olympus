@@ -371,5 +371,24 @@ public class ConfigurationTests
         Assert.True(config.EnableAutoAttackUntilDead);
     }
 
+    [Fact]
+    public void ResetToDefaults_ResetsEnableOnAutoAttack()
+    {
+        var config = new Configuration { EnableOnAutoAttack = false };
+
+        config.ResetToDefaults();
+
+        Assert.True(config.EnableOnAutoAttack);
+    }
+
+    [Fact]
+    public void DefaultConfiguration_StartsRotationOnAutoAttack()
+    {
+        var config = new Configuration();
+
+        Assert.True(config.EnableOnAutoAttack);
+        Assert.True(config.EnableAutoAttackUntilDead);
+    }
+
     #endregion
 }

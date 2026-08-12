@@ -106,6 +106,39 @@ public class AutoAttackHoldDecisionTests
         Assert.True(AutoAttackHoldDecision.ShouldHold(
             currentlyHolding: false,
             inCombat: true,
+            currentlyAutoAttacking: false,
+            hasLivingHostileTarget: true,
+            engagedTargetStillAlive: true,
+            targetIsDead: false,
+            engagedTargetDied: false,
+            standStillPunisherActive: false,
+            pluginEnabled: true,
+            playerAlive: true));
+    }
+
+    [Fact]
+    public void ShouldHold_StartsWhenAutoAttackingLivingTarget()
+    {
+        Assert.True(AutoAttackHoldDecision.ShouldHold(
+            currentlyHolding: false,
+            inCombat: false,
+            currentlyAutoAttacking: true,
+            hasLivingHostileTarget: true,
+            engagedTargetStillAlive: true,
+            targetIsDead: false,
+            engagedTargetDied: false,
+            standStillPunisherActive: false,
+            pluginEnabled: true,
+            playerAlive: true));
+    }
+
+    [Fact]
+    public void ShouldHold_DoesNotStartOnTargetAloneWithoutAaOrCombat()
+    {
+        Assert.False(AutoAttackHoldDecision.ShouldHold(
+            currentlyHolding: false,
+            inCombat: false,
+            currentlyAutoAttacking: false,
             hasLivingHostileTarget: true,
             engagedTargetStillAlive: true,
             targetIsDead: false,
@@ -121,6 +154,7 @@ public class AutoAttackHoldDecisionTests
         Assert.True(AutoAttackHoldDecision.ShouldHold(
             currentlyHolding: true,
             inCombat: false,
+            currentlyAutoAttacking: false,
             hasLivingHostileTarget: true,
             engagedTargetStillAlive: true,
             targetIsDead: false,
@@ -136,6 +170,7 @@ public class AutoAttackHoldDecisionTests
         Assert.False(AutoAttackHoldDecision.ShouldHold(
             currentlyHolding: true,
             inCombat: true,
+            currentlyAutoAttacking: true,
             hasLivingHostileTarget: false,
             engagedTargetStillAlive: false,
             targetIsDead: true,
@@ -146,9 +181,11 @@ public class AutoAttackHoldDecisionTests
     }
 
     [Fact]
-    public void ShouldTreatAsInCombat_OnlyWhileHoldingLivingHardTarget()
+    public void ShouldTreatAsInCombat_WhileHoldingOrAutoAttackingLivingHardTarget()
     {
         Assert.True(AutoAttackHoldDecision.ShouldTreatAsInCombat(true, true, true));
+        Assert.True(AutoAttackHoldDecision.ShouldTreatAsInCombat(true, false, true, currentlyAutoAttacking: true));
+        Assert.False(AutoAttackHoldDecision.ShouldTreatAsInCombat(true, false, true, currentlyAutoAttacking: false));
         Assert.False(AutoAttackHoldDecision.ShouldTreatAsInCombat(true, true, false));
         Assert.False(AutoAttackHoldDecision.ShouldTreatAsInCombat(false, true, true));
     }

@@ -61,10 +61,13 @@ public static class AutoAttackHoldDecision
 
     /// <summary>
     /// Whether the sticky hold latch should become (or stay) active this frame.
+    /// Starts on server combat OR when the player has auto-attack on a living hostile
+    /// (select target → press AA should begin the rotation before InCombat flips).
     /// </summary>
     public static bool ShouldHold(
         bool currentlyHolding,
         bool inCombat,
+        bool currentlyAutoAttacking,
         bool hasLivingHostileTarget,
         bool engagedTargetStillAlive,
         bool targetIsDead,
@@ -79,7 +82,7 @@ public static class AutoAttackHoldDecision
         if (targetIsDead || engagedTargetDied)
             return false;
 
-        if (hasLivingHostileTarget && inCombat)
+        if (hasLivingHostileTarget && (inCombat || currentlyAutoAttacking))
             return true;
 
         // Keep holding while the engaged enemy is still alive even if InCombat or hard-target flickers.
@@ -89,6 +92,12 @@ public static class AutoAttackHoldDecision
     /// <summary>
     /// Whether rotations should treat this frame as in-combat because we are finishing a living target.
     /// </summary>
-    public static bool ShouldTreatAsInCombat(bool managementEnabled, bool isHoldingUntilDead, bool hasLivingHostileTarget) =>
-        managementEnabled && isHoldingUntilDead && hasLivingHostileTarget;
+    public static bool ShouldTreatAsInCombat(
+        bool managementEnabled,
+        bool isHoldingUntilDead,
+        bool hasLivingHostileTarget,
+        bool currentlyAutoAttacking = false) =>
+        managementEnabled
+        && hasLivingHostileTarget
+        && (isHoldingUntilDead || currentlyAutoAttacking);
 }

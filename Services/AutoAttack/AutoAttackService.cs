@@ -50,10 +50,13 @@ public sealed unsafe class AutoAttackService : IAutoAttackService
     {
         get
         {
-            if (!_configuration.EnableAutoAttackUntilDead || !_isHoldingUntilDead)
+            if (!_configuration.EnableAutoAttackUntilDead)
                 return false;
 
-            return GetHardTarget() is { } target && IsLivingHostile(target);
+            if (GetHardTarget() is not { } target || !IsLivingHostile(target))
+                return false;
+
+            return _isHoldingUntilDead || IsAutoAttacking();
         }
     }
 
@@ -77,6 +80,7 @@ public sealed unsafe class AutoAttackService : IAutoAttackService
         var hardTarget = GetHardTarget();
         var hasLivingHostile = hardTarget != null && IsLivingHostile(hardTarget);
         var targetIsDead = hardTarget != null && IsHostile(hardTarget) && IsDead(hardTarget);
+        var currentlyAa = IsAutoAttacking();
 
         if (hasLivingHostile && hardTarget != null)
             _engagedTargetId = hardTarget.GameObjectId;
@@ -86,6 +90,7 @@ public sealed unsafe class AutoAttackService : IAutoAttackService
         _isHoldingUntilDead = AutoAttackHoldDecision.ShouldHold(
             currentlyHolding: _isHoldingUntilDead,
             inCombat: inCombat,
+            currentlyAutoAttacking: currentlyAa,
             hasLivingHostileTarget: hasLivingHostile,
             engagedTargetStillAlive: engagedAlive,
             targetIsDead: targetIsDead,
@@ -97,7 +102,6 @@ public sealed unsafe class AutoAttackService : IAutoAttackService
         if (!_isHoldingUntilDead && (targetIsDead || engagedDied))
             _engagedTargetId = 0;
 
-        var currentlyAa = IsAutoAttacking();
         var desired = AutoAttackHoldDecision.GetDesiredState(
             managementEnabled: true,
             pluginEnabled: true,

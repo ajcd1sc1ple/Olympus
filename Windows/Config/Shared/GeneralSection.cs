@@ -221,7 +221,7 @@ public sealed class GeneralSection
                 () => this.config.EnableAutoAttackUntilDead,
                 v => this.config.EnableAutoAttackUntilDead = v,
                 Loc.T(LocalizedStrings.General.EnableAutoAttackUntilDeadDesc,
-                    "Keeps auto-attack on while finishing an enemy, and only turns it off after that enemy dies. Stops early AA drop from combat-flag flicker. If BossMod Auto Autos still turns AA off early, disable that tweak in BossMod Action Tweaks."),
+                    "Starts the rotation when you auto-attack a living enemy, keeps AA on until that enemy dies, then turns AA off. If BossMod Auto Autos still turns AA off early, disable that tweak in BossMod Action Tweaks."),
                 this.save);
 
             ConfigUIHelpers.Spacing();

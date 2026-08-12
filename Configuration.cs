@@ -83,12 +83,12 @@ public sealed class Configuration : IPluginConfiguration
     /// When true, Olympus will start executing the rotation when auto-attack is active
     /// on the target, even before the InCombat flag is set.
     /// </summary>
-    public bool EnableOnAutoAttack { get; set; } = false;
+    public bool EnableOnAutoAttack { get; set; } = true;
 
     /// <summary>
     /// When true, Olympus keeps game auto-attack on until the engaged enemy dies,
-    /// then turns it off. Prevents early AA drop when InCombat flickers or another
-    /// plugin clears autos before the kill. Default on.
+    /// then turns it off. Also starts the rotation when auto-attack is active on a
+    /// living hostile (before the server InCombat flag). Default on.
     /// </summary>
     public bool EnableAutoAttackUntilDead { get; set; } = true;
 
@@ -220,7 +220,7 @@ public sealed class Configuration : IPluginConfiguration
         var showDuringCutscenes = ShowDuringCutscenes;
 
         // Reset general behavior
-        EnableOnAutoAttack = false;
+        EnableOnAutoAttack = true;
         EnableAutoAttackUntilDead = true;
         EnablePingCompensation = false;
         EnableOrbwalkerIntegration = true;
