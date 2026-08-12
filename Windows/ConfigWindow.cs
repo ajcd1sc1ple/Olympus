@@ -78,7 +78,7 @@ public sealed class ConfigWindow : Window
     private readonly MovementSection movementSection;
     private readonly DebugDisplaySection debugDisplaySection;
 
-    public ConfigWindow(Configuration configuration, Action saveConfiguration, UpdateCheckerService updateCheckerService, ITextureProvider textureProvider, IRMIWalkHookService hookService, IOrbwalkerIpc? orbwalkerIpc = null, IObjectTable? objectTable = null)
+    public ConfigWindow(Configuration configuration, Action saveConfiguration, UpdateCheckerService updateCheckerService, ITextureProvider textureProvider, IRMIWalkHookService hookService, IOrbwalkerIpc? orbwalkerIpc = null, IObjectTable? objectTable = null, IBossModPresence? bossModPresence = null)
         : base(Loc.T(LocalizedStrings.Config.WindowTitle, "MyOlympus Settings"), ImGuiWindowFlags.NoCollapse)
     {
         this.configuration = configuration;
@@ -123,7 +123,7 @@ public sealed class ConfigWindow : Window
         partyCoordinationSection = new PartyCoordinationSection(configuration, saveConfiguration);
         consumablesSection = new ConsumablesSection(configuration, saveConfiguration);
         prePullSection = new PrePullSection(configuration, saveConfiguration);
-        movementSection = new MovementSection(configuration, saveConfiguration, hookService);
+        movementSection = new MovementSection(configuration, saveConfiguration, hookService, bossModPresence);
         debugDisplaySection = new DebugDisplaySection(configuration, saveConfiguration);
 
         Size = new Vector2(650, 700);

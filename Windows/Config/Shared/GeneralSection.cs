@@ -227,6 +227,16 @@ public sealed class GeneralSection
 
             DrawOrbwalkerIntegration();
 
+            ConfigUIHelpers.Spacing();
+
+            ConfigUIHelpers.Toggle(
+                Loc.T(LocalizedStrings.General.EnablePostCancelHardcastHold, "Hold hardcasts after cancel"),
+                () => this.config.EnablePostCancelHardcastHold,
+                v => this.config.EnablePostCancelHardcastHold = v,
+                Loc.T(LocalizedStrings.General.EnablePostCancelHardcastHoldDesc,
+                    "If a cast-time GCD is cancelled while moving, briefly stop retrying hardcasts so you do not get a recast stutter loop."),
+                this.save);
+
             ConfigUIHelpers.EndIndent();
         }
     }

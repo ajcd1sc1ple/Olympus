@@ -31,6 +31,7 @@ public class TrashAvoidanceService : ITrashAvoidanceService
     private readonly ICondition? condition;
     private readonly ICameraAzimuthProbe? cameraProbe;
     private readonly IOrbwalkerIpc? orbwalkerIpc;
+    private readonly IBossModPresence? bossModPresence;
 
     private readonly Dictionary<ulong, DateTime> firstSeenPerCast = new();
     private readonly Dictionary<ulong, int> reactionDelayPerCast = new();
@@ -53,7 +54,8 @@ public class TrashAvoidanceService : ITrashAvoidanceService
         IObjectTable? objectTable = null,
         ICondition? condition = null,
         ICameraAzimuthProbe? cameraProbe = null,
-        IOrbwalkerIpc? orbwalkerIpc = null)
+        IOrbwalkerIpc? orbwalkerIpc = null,
+        IBossModPresence? bossModPresence = null)
     {
         this.hook = hook;
         this.tracker = tracker;
@@ -68,6 +70,7 @@ public class TrashAvoidanceService : ITrashAvoidanceService
         this.condition = condition;
         this.cameraProbe = cameraProbe;
         this.orbwalkerIpc = orbwalkerIpc;
+        this.bossModPresence = bossModPresence;
 
         if (clientState != null)
             clientState.TerritoryChanged += OnTerritoryChanged;
@@ -100,6 +103,15 @@ public class TrashAvoidanceService : ITrashAvoidanceService
         var cfg = configAccessor();
 
         if (!cfg.EnableTrashAoEAvoidance) { Suppress("disabled"); ClearVector(); return; }
+        bossModPresence?.Refresh();
+        if (bossModPresence?.IsLoaded == true
+            && cfg.SuppressTrashAvoidanceWhenBossModPresent
+            && !cfg.ForceTrashAvoidanceDespiteBossMod)
+        {
+            Suppress("bossmod-present");
+            ClearVector();
+            return;
+        }
         if (!hook.HookInstalled) { Suppress("no-hook"); ClearVector(); return; }
         if (IsHighEndZone()) { Suppress("high-end-zone"); ClearVector(); return; }
         if (boss.IsBossEngaged) { Suppress("boss-engaged"); ClearVector(); return; }

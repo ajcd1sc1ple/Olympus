@@ -160,6 +160,8 @@ public static class LocalizedStrings
         public const string OrbwalkerStatusJobOff = "config.general.orbwalker_status_job_off";
         public const string OrbwalkerStatusActive = "config.general.orbwalker_status_active";
         public const string OrbwalkerStatusActiveNoForceStop = "config.general.orbwalker_status_active_no_force_stop";
+        public const string EnablePostCancelHardcastHold = "config.general.enable_post_cancel_hardcast_hold";
+        public const string EnablePostCancelHardcastHoldDesc = "config.general.enable_post_cancel_hardcast_hold_desc";
     }
 
     /// <summary>Keys for window behavior settings.</summary>
@@ -268,6 +270,11 @@ public static class LocalizedStrings
         public const string HookUnavailableBanner = "movement.hook_unavailable";
         public const string EnableTrashAoEAvoidance = "movement.enable_avoidance";
         public const string EnableTrashAoEAvoidanceDesc = "movement.enable_avoidance_desc";
+        public const string BossModDetected = "movement.bossmod_detected";
+        public const string SuppressWhenBossMod = "movement.suppress_when_bossmod";
+        public const string SuppressWhenBossModDesc = "movement.suppress_when_bossmod_desc";
+        public const string ForceDespiteBossMod = "movement.force_despite_bossmod";
+        public const string ForceDespiteBossModDesc = "movement.force_despite_bossmod_desc";
         public const string EnableAutoInteract = "movement.enable_interact";
         public const string EnableAutoInteractDesc = "movement.enable_interact_desc";
         public const string ReactionDelayLabel = "movement.reaction_delay";

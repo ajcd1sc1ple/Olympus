@@ -64,6 +64,22 @@ public sealed class Configuration : IPluginConfiguration
     public bool EnableOrbwalkerIntegration { get; set; } = true;
 
     /// <summary>
+    /// After a cast-time GCD is cancelled while moving, briefly suppress further hardcasts
+    /// so Olympus does not spam-retry into the same cancel. Default on.
+    /// </summary>
+    public bool EnablePostCancelHardcastHold { get; set; } = true;
+
+    /// <summary>
+    /// Duration of the post-cancel hardcast hold in seconds (clamped 0.3–0.6).
+    /// </summary>
+    private float _postCancelHardcastHoldSeconds = 0.4f;
+    public float PostCancelHardcastHoldSeconds
+    {
+        get => _postCancelHardcastHoldSeconds;
+        set => _postCancelHardcastHoldSeconds = Math.Clamp(value, 0.3f, 0.6f);
+    }
+
+    /// <summary>
     /// When true, Olympus will start executing the rotation when auto-attack is active
     /// on the target, even before the InCombat flag is set.
     /// </summary>

@@ -114,6 +114,10 @@ public abstract class BaseRotation<TContext, TModule> : IRotation, IDisposable, 
     private Vector3 _lastPosition;
     private DateTime _lastMovementTime = DateTime.MinValue;
 
+    // Post-cancel hardcast hold (prevents spam-retry after a move-cancelled cast)
+    private bool _wasCastingCastTimeGcd;
+    private DateTime _hardcastHoldUntil = DateTime.MinValue;
+
     // Cached timestamp for current frame — set once at start of ExecuteInternal
     protected DateTime FrameTimestamp;
 
@@ -248,6 +252,24 @@ public abstract class BaseRotation<TContext, TModule> : IRotation, IDisposable, 
             Configuration.EnableOrbwalkerIntegration,
             orbwalkerActive,
             orbwalkerLocked);
+
+        // After a move-cancelled cast-time GCD, keep suppressing hardcasts briefly.
+        if (Configuration.EnablePostCancelHardcastHold)
+        {
+            var holdSeconds = PostCancelCastHold.ClampHoldSeconds(Configuration.PostCancelHardcastHoldSeconds);
+            _hardcastHoldUntil = PostCancelCastHold.UpdateHoldUntil(
+                wasCastingCastTimeGcd: _wasCastingCastTimeGcd,
+                isCasting: player.IsCasting,
+                isMoving: isMoving,
+                now: FrameTimestamp,
+                holdDuration: TimeSpan.FromSeconds(holdSeconds),
+                currentHoldUntil: _hardcastHoldUntil);
+
+            if (PostCancelCastHold.ShouldBlock(FrameTimestamp, _hardcastHoldUntil))
+                movementBlocksHardcasts = true;
+        }
+
+        _wasCastingCastTimeGcd = player.IsCasting && player.TotalCastTime > 0f;
 
         // Combat tracking — also treat auto-attack as combat if enabled
         var inCombat = (player.StatusFlags & StatusFlags.InCombat) != 0;
