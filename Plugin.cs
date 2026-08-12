@@ -442,7 +442,7 @@ public sealed class Plugin : IDalamudPlugin
         this.drawingService = new DrawingService(pluginInterface, configuration.DrawHelper, log);
         this.drawCanvas = new DrawCanvas(drawingService, configuration, objectTable, clientState, targetManager, gameGui, positionalService, rotationManager);
         this.updateCheckerService = new UpdateCheckerService(PluginVersion, notificationManager, log);
-        this.configWindow = new ConfigWindow(configuration, SaveConfiguration, updateCheckerService, textureProvider, rmiWalkHookService, orbwalkerIpc, clientState);
+        this.configWindow = new ConfigWindow(configuration, SaveConfiguration, updateCheckerService, textureProvider, rmiWalkHookService, orbwalkerIpc, objectTable);
         this.mainWindow = new MainWindow(configuration, SaveConfiguration, OpenConfigUI, OpenDebugUI, OpenAnalyticsUI, OpenTrainingUI, OpenChangelogUI, OpenOverlayUI, PluginVersion, rotationManager, textureProvider);
         var smartAoETab = new SmartAoETab(aoeTracker, drawCanvas, objectTable);
         this.debugWindow = new DebugWindow(debugService, configuration, timelineService, smartAoETab);

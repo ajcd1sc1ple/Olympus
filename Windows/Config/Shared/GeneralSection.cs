@@ -18,7 +18,7 @@ public sealed class GeneralSection
     private readonly Configuration config;
     private readonly Action save;
     private readonly IOrbwalkerIpc? orbwalkerIpc;
-    private readonly IClientState? clientState;
+    private readonly IObjectTable? objectTable;
 
     private string[] GetStrategyNames() =>
     [
@@ -53,12 +53,12 @@ public sealed class GeneralSection
         Loc.T(LocalizedStrings.RoleActions.SurecastModeAuto, "Use on Cooldown")
     ];
 
-    public GeneralSection(Configuration config, Action save, IOrbwalkerIpc? orbwalkerIpc = null, IClientState? clientState = null)
+    public GeneralSection(Configuration config, Action save, IOrbwalkerIpc? orbwalkerIpc = null, IObjectTable? objectTable = null)
     {
         this.config = config;
         this.save = save;
         this.orbwalkerIpc = orbwalkerIpc;
-        this.clientState = clientState;
+        this.objectTable = objectTable;
     }
 
     public void DrawGeneral()
@@ -257,7 +257,7 @@ public sealed class GeneralSection
         if (!this.orbwalkerIpc.PluginEnabled())
             return Loc.T(LocalizedStrings.General.OrbwalkerStatusPluginOff, "Status: Orbwalker plugin disabled");
 
-        var jobId = this.clientState?.LocalPlayer?.ClassJob.RowId ?? 0;
+        var jobId = this.objectTable?.LocalPlayer?.ClassJob.RowId ?? 0;
         if (jobId != 0 && this.orbwalkerIpc.IsActiveForJob(jobId))
         {
             return this.orbwalkerIpc.OrbwalkingMode()

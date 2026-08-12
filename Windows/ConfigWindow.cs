@@ -78,7 +78,7 @@ public sealed class ConfigWindow : Window
     private readonly MovementSection movementSection;
     private readonly DebugDisplaySection debugDisplaySection;
 
-    public ConfigWindow(Configuration configuration, Action saveConfiguration, UpdateCheckerService updateCheckerService, ITextureProvider textureProvider, IRMIWalkHookService hookService, IOrbwalkerIpc? orbwalkerIpc = null, IClientState? clientState = null)
+    public ConfigWindow(Configuration configuration, Action saveConfiguration, UpdateCheckerService updateCheckerService, ITextureProvider textureProvider, IRMIWalkHookService hookService, IOrbwalkerIpc? orbwalkerIpc = null, IObjectTable? objectTable = null)
         : base(Loc.T(LocalizedStrings.Config.WindowTitle, "MyOlympus Settings"), ImGuiWindowFlags.NoCollapse)
     {
         this.configuration = configuration;
@@ -89,7 +89,7 @@ public sealed class ConfigWindow : Window
         sidebar = new ConfigSidebar(textureProvider);
 
         // Initialize all section renderers
-        generalSection = new GeneralSection(configuration, saveConfiguration, orbwalkerIpc, clientState);
+        generalSection = new GeneralSection(configuration, saveConfiguration, orbwalkerIpc, objectTable);
         healerSharedSection = new HealerSharedSection(configuration, saveConfiguration);
         whiteMageSection = new WhiteMageSection(configuration, saveConfiguration);
         scholarSection = new ScholarSection(configuration, saveConfiguration);
