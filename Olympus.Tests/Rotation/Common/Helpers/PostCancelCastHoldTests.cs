@@ -59,6 +59,24 @@ public class PostCancelCastHoldTests
         Assert.Equal(existing, until);
     }
 
+    [Fact]
+    public void UpdateHoldUntil_Stopped_ClearsExistingHold()
+    {
+        var now = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var existing = now.AddSeconds(1);
+
+        var until = PostCancelCastHold.UpdateHoldUntil(
+            wasCastingCastTimeGcd: false,
+            isCasting: false,
+            isMoving: false,
+            now: now,
+            holdDuration: TimeSpan.FromSeconds(0.4),
+            currentHoldUntil: existing);
+
+        Assert.Equal(DateTime.MinValue, until);
+        Assert.False(PostCancelCastHold.ShouldBlock(now, until));
+    }
+
     [Theory]
     [InlineData(0.1f, 0.3f)]
     [InlineData(0.4f, 0.4f)]

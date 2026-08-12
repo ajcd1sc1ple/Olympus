@@ -155,6 +155,7 @@ public sealed class RotationFactory
                 var rotation = (IRotation)constructor.Invoke(args)!;
                 AttachOrbwalkerIfNeeded(rotation);
                 AttachAutoAttackIfNeeded(rotation);
+                AttachBossModIfNeeded(rotation);
                 return rotation;
             }
         }
@@ -178,6 +179,15 @@ public sealed class RotationFactory
             && _services.TryGet<IAutoAttackService>(out var autoAttackService))
         {
             aaConsumer.AttachAutoAttackService(autoAttackService);
+        }
+    }
+
+    private void AttachBossModIfNeeded(IRotation rotation)
+    {
+        if (rotation is Olympus.Rotation.Common.Helpers.IBossModPresenceIntegration bossModConsumer
+            && _services.TryGet<Olympus.Services.Movement.IBossModPresence>(out var presence))
+        {
+            bossModConsumer.AttachBossModPresence(presence);
         }
     }
 

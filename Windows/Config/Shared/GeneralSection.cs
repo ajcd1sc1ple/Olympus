@@ -195,7 +195,7 @@ public sealed class GeneralSection
             this.config.MovementTolerance = moveTolerance / 1000f;
             this.save();
         }
-        ImGui.TextDisabled(Loc.T(LocalizedStrings.Targeting.MovementToleranceDesc, "Delay after stopping before casting. Lower = faster, higher = safer."));
+        ImGui.TextDisabled(Loc.T(LocalizedStrings.Targeting.MovementToleranceDesc, "Delay after stopping before casting. Lower = faster, higher = safer. Tiny BossMod pathing jitter is ignored separately."));
 
         ConfigUIHelpers.EndIndent();
     }

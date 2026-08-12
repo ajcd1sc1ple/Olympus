@@ -564,6 +564,7 @@ public sealed class Plugin : IDalamudPlugin
         // Core services (register both interface and concrete where interface exists)
         container.Register(configuration);
         container.Register<IOrbwalkerIpc, OrbwalkerIpc>(orbwalkerIpc);
+        container.Register<Olympus.Services.Movement.IBossModPresence, Olympus.Services.Movement.BossModPresence>(bossModPresence);
         container.Register<Olympus.Services.AutoAttack.IAutoAttackService, Olympus.Services.AutoAttack.AutoAttackService>(autoAttackService);
         container.Register<IActionTracker, ActionTracker>(actionTracker);
         container.Register<IActionService, ActionService>(actionService);

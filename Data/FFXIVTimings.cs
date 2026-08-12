@@ -64,6 +64,9 @@ public static class FFXIVTimings
     public const int ErrorThrottleSeconds = 10;
 
     // Movement Detection
-    /// <summary>Distance squared threshold to detect player movement.</summary>
-    public const float MovementThresholdSquared = 0.001f;
+    /// <summary>
+    /// Distance squared threshold to detect player movement (~0.15 yalms).
+    /// Higher than animation / AI micro-jitter so standing still is not treated as moving.
+    /// </summary>
+    public const float MovementThresholdSquared = 0.0225f;
 }

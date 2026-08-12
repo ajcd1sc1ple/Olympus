@@ -14,6 +14,7 @@ public static class PostCancelCastHold
 
     /// <summary>
     /// Arms or preserves the hold deadline from a casting falling edge.
+    /// Clears immediately once the player is stationary so hardcasts resume after a dodge.
     /// </summary>
     public static DateTime UpdateHoldUntil(
         bool wasCastingCastTimeGcd,
@@ -23,8 +24,12 @@ public static class PostCancelCastHold
         TimeSpan holdDuration,
         DateTime currentHoldUntil)
     {
+        // Stopped → resume hardcasts immediately (do not keep the cancel hold armed).
+        if (!isMoving)
+            return DateTime.MinValue;
+
         // Falling edge of a cast-time GCD while still moving → cancel/stutter risk.
-        if (wasCastingCastTimeGcd && !isCasting && isMoving)
+        if (wasCastingCastTimeGcd && !isCasting)
             return now + holdDuration;
 
         return currentHoldUntil;

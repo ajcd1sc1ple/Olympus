@@ -28,7 +28,7 @@ namespace Olympus.Rotation.Base;
 /// </summary>
 /// <typeparam name="TContext">The job-specific context type.</typeparam>
 /// <typeparam name="TModule">The job-specific module interface type.</typeparam>
-public abstract class BaseRotation<TContext, TModule> : IRotation, IDisposable, IOrbwalkerCastIntegration, IAutoAttackHoldIntegration
+public abstract class BaseRotation<TContext, TModule> : IRotation, IDisposable, IOrbwalkerCastIntegration, IAutoAttackHoldIntegration, IBossModPresenceIntegration
     where TContext : IRotationContext
     where TModule : IRotationModule<TContext>
 {
@@ -102,6 +102,11 @@ public abstract class BaseRotation<TContext, TModule> : IRotation, IDisposable, 
     /// Optional auto-attack hold service. Attached by <see cref="RotationFactory"/> after construction.
     /// </summary>
     protected IAutoAttackService? AutoAttackService { get; private set; }
+
+    /// <summary>
+    /// Optional BossMod presence. Attached by <see cref="RotationFactory"/> after construction.
+    /// </summary>
+    protected Olympus.Services.Movement.IBossModPresence? BossModPresence { get; private set; }
 
     #endregion
 
@@ -310,6 +315,10 @@ public abstract class BaseRotation<TContext, TModule> : IRotation, IDisposable, 
     /// <inheritdoc />
     void IAutoAttackHoldIntegration.AttachAutoAttackService(IAutoAttackService? service) => AutoAttackService = service;
 
+    /// <inheritdoc />
+    void IBossModPresenceIntegration.AttachBossModPresence(Olympus.Services.Movement.IBossModPresence? presence) =>
+        BossModPresence = presence;
+
     /// <summary>
     /// Updates MP forecast service with current player MP state.
     /// Override to provide job-specific Lucid Dreaming detection.
@@ -322,17 +331,17 @@ public abstract class BaseRotation<TContext, TModule> : IRotation, IDisposable, 
     /// <returns>Tuple of (isMoving, positionChanged)</returns>
     protected (bool isMoving, bool positionChanged) UpdateMovement(IPlayerCharacter player)
     {
-        var positionChanged = Vector3.DistanceSquared(player.Position, _lastPosition) > FFXIVTimings.MovementThresholdSquared;
+        BossModPresence?.Refresh();
+        var thresholdSquared = MovementGate.ThresholdSquaredFor(BossModPresence?.IsLoaded == true);
+        var positionChanged = MovementGate.HasMoved(player.Position, _lastPosition, thresholdSquared);
         _lastPosition = player.Position;
 
         // Track when we last detected actual movement
         if (positionChanged)
             _lastMovementTime = FrameTimestamp;
 
-        // Consider player as "moving" if position changed OR within grace period after stopping
-        // This prevents stutter-casting when player briefly stops during movement
         var timeSinceMovement = (FrameTimestamp - _lastMovementTime).TotalSeconds;
-        var isMoving = positionChanged || timeSinceMovement < Configuration.MovementTolerance;
+        var isMoving = MovementGate.IsMoving(positionChanged, timeSinceMovement, Configuration.MovementTolerance);
 
         return (isMoving, positionChanged);
     }
