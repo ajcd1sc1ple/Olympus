@@ -674,6 +674,9 @@ public sealed class TargetingService : ITargetingService
 
         var playerPos = player.Position;
         var maxRangeYalms = (byte)Math.Ceiling(maxRange);
+        var hardTargetId = _targetManager.Target is IBattleNpc hardTarget
+            ? hardTarget.GameObjectId
+            : 0UL;
 
         foreach (var obj in _objectTable)
         {
@@ -709,16 +712,21 @@ public sealed class TargetingService : ITargetingService
                 !HasLineOfSight(playerPos, npc.Position))
                 continue;
 
+            var isHardTarget = hardTargetId != 0UL && npc.GameObjectId == hardTargetId;
+
             // Invulnerability check — skip enemies with known invuln status effects
             // (boss phase transitions, invulnerable adds, untouchable objects).
-            // Only applied to auto-targeting; explicit CurrentTarget/FocusTarget bypass this.
-            if (_configuration.Targeting.EnableInvulnerabilityFiltering &&
+            // Never skip the player's hard target — keep attacking until it dies.
+            if (!isHardTarget &&
+                _configuration.Targeting.EnableInvulnerabilityFiltering &&
                 HasInvulnerabilityStatus(npc))
                 continue;
 
             // Stop-marker exclusion — skip enemies a party leader has flagged with Stop1/Stop2.
-            // Explicit CurrentTarget/FocusTarget strategies bypass this (they don't call GetValidEnemies).
-            if (_stopMarkedIds.Count > 0 && _stopMarkedIds.Contains(npc.GameObjectId))
+            // Never skip the player's hard target.
+            if (!isHardTarget &&
+                _stopMarkedIds.Count > 0 &&
+                _stopMarkedIds.Contains(npc.GameObjectId))
                 continue;
 
             _cachedEnemies.Add(npc);

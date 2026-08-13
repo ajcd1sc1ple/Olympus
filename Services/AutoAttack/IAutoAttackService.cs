@@ -16,8 +16,9 @@ public interface IAutoAttackService
     ulong EngagedTargetId { get; }
 
     /// <summary>
-    /// True when management is on and we still have a living hostile hard target under hold —
-    /// rotations should keep executing even if the server InCombat flag flickered off.
+    /// True when management is on and we are still finishing a living engaged enemy —
+    /// rotations should keep executing even if the server InCombat flag or AA state
+    /// flickered off (common when the target is low HP).
     /// </summary>
     bool ShouldTreatAsInCombat { get; }
 

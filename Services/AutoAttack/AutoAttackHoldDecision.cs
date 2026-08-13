@@ -13,7 +13,7 @@ public static class AutoAttackHoldDecision
     /// <param name="playerAlive">Local player has HP &gt; 0.</param>
     /// <param name="inCombat">Server InCombat flag.</param>
     /// <param name="currentlyAutoAttacking">Current UI auto-attack state.</param>
-    /// <param name="hasLivingHostileTarget">Hard target is a living hostile.</param>
+    /// <param name="hasLivingHostileTarget">Hard target is a living hostile (prefer targetable).</param>
     /// <param name="targetIsDead">Hard target exists and is dead (or HP 0).</param>
     /// <param name="engagedTargetStillAlive">Previously engaged entity is still alive (may not be hard-targeted).</param>
     /// <param name="engagedTargetDied">Previously engaged entity is confirmed dead.</param>
@@ -44,6 +44,7 @@ public static class AutoAttackHoldDecision
             return false;
 
         // Living hard target while holding / in combat / already AA: keep or start AA.
+        // Keep finishing until death — do not idle when the server combat flag flickers.
         if (hasLivingHostileTarget && (isHoldingUntilDead || inCombat || currentlyAutoAttacking))
             return true;
 
@@ -91,13 +92,17 @@ public static class AutoAttackHoldDecision
 
     /// <summary>
     /// Whether rotations should treat this frame as in-combat because we are finishing a living target.
+    /// Holding until the engaged enemy dies keeps combat true even if the hard target briefly
+    /// loses IsTargetable or the server InCombat / AA flags flicker off at low HP.
     /// </summary>
     public static bool ShouldTreatAsInCombat(
         bool managementEnabled,
         bool isHoldingUntilDead,
         bool hasLivingHostileTarget,
-        bool currentlyAutoAttacking = false) =>
+        bool currentlyAutoAttacking = false,
+        bool engagedTargetStillAlive = false) =>
         managementEnabled
-        && hasLivingHostileTarget
-        && (isHoldingUntilDead || currentlyAutoAttacking);
+        && (
+            (isHoldingUntilDead && (hasLivingHostileTarget || engagedTargetStillAlive))
+            || (hasLivingHostileTarget && currentlyAutoAttacking));
 }

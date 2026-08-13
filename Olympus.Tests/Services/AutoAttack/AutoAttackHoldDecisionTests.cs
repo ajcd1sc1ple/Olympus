@@ -189,4 +189,43 @@ public class AutoAttackHoldDecisionTests
         Assert.False(AutoAttackHoldDecision.ShouldTreatAsInCombat(true, true, false));
         Assert.False(AutoAttackHoldDecision.ShouldTreatAsInCombat(false, true, true));
     }
+
+    [Fact]
+    public void ShouldTreatAsInCombat_WhileHoldingKeepsCombatWhenHardTargetFlickers()
+    {
+        // Holding + engaged alive, even with no living hard-target this frame
+        // (InCombat/AA/IsTargetable flicker at low HP) — keep the rotation fighting.
+        Assert.True(AutoAttackHoldDecision.ShouldTreatAsInCombat(
+            managementEnabled: true,
+            isHoldingUntilDead: true,
+            hasLivingHostileTarget: false,
+            currentlyAutoAttacking: false,
+            engagedTargetStillAlive: true));
+
+        Assert.False(AutoAttackHoldDecision.ShouldTreatAsInCombat(
+            managementEnabled: true,
+            isHoldingUntilDead: true,
+            hasLivingHostileTarget: false,
+            currentlyAutoAttacking: false,
+            engagedTargetStillAlive: false));
+    }
+
+    [Fact]
+    public void GetDesiredState_HoldingWithLivingTarget_ForcesAaEvenWhenServerCombatOff()
+    {
+        var desired = AutoAttackHoldDecision.GetDesiredState(
+            managementEnabled: true,
+            pluginEnabled: true,
+            playerAlive: true,
+            inCombat: false,
+            currentlyAutoAttacking: false,
+            hasLivingHostileTarget: true,
+            targetIsDead: false,
+            engagedTargetStillAlive: true,
+            engagedTargetDied: false,
+            isHoldingUntilDead: true,
+            standStillPunisherActive: false);
+
+        Assert.True(desired);
+    }
 }

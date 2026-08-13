@@ -53,10 +53,19 @@ public sealed unsafe class AutoAttackService : IAutoAttackService
             if (!_configuration.EnableAutoAttackUntilDead)
                 return false;
 
-            if (GetHardTarget() is not { } target || !IsLivingHostile(target))
-                return false;
+            var (engagedAlive, _) = EvaluateEngagedTarget();
+            var hardTarget = GetHardTarget();
+            var hasLivingHostile = hardTarget != null && IsLivingHostile(hardTarget);
+            // While holding, also count a hard target that is alive/hostile even if
+            // IsTargetable briefly flickers (common as enemies hit low HP).
+            var hasHostileAliveHardTarget = hardTarget != null && IsHostileAlive(hardTarget);
 
-            return _isHoldingUntilDead || IsAutoAttacking();
+            return AutoAttackHoldDecision.ShouldTreatAsInCombat(
+                managementEnabled: true,
+                isHoldingUntilDead: _isHoldingUntilDead,
+                hasLivingHostileTarget: hasLivingHostile || (_isHoldingUntilDead && hasHostileAliveHardTarget),
+                currentlyAutoAttacking: IsAutoAttacking(),
+                engagedTargetStillAlive: engagedAlive);
         }
     }
 
@@ -78,20 +87,26 @@ public sealed unsafe class AutoAttackService : IAutoAttackService
 
         var standStillPunisher = PlayerSafetyHelper.IsStandStillPunisherActive(player);
         var hardTarget = GetHardTarget();
+        var hasHostileAliveHardTarget = hardTarget != null && IsHostileAlive(hardTarget);
         var hasLivingHostile = hardTarget != null && IsLivingHostile(hardTarget);
         var targetIsDead = hardTarget != null && IsHostile(hardTarget) && IsDead(hardTarget);
         var currentlyAa = IsAutoAttacking();
 
-        if (hasLivingHostile && hardTarget != null)
+        if (hasHostileAliveHardTarget && hardTarget != null)
             _engagedTargetId = hardTarget.GameObjectId;
 
         var (engagedAlive, engagedDied) = EvaluateEngagedTarget();
+
+        // While already holding, keep treating a briefly untargetable living hard target
+        // as valid so we do not drop AA / combat at low HP.
+        var livingForHold = hasLivingHostile
+                            || (_isHoldingUntilDead && hasHostileAliveHardTarget);
 
         _isHoldingUntilDead = AutoAttackHoldDecision.ShouldHold(
             currentlyHolding: _isHoldingUntilDead,
             inCombat: inCombat,
             currentlyAutoAttacking: currentlyAa,
-            hasLivingHostileTarget: hasLivingHostile,
+            hasLivingHostileTarget: livingForHold,
             engagedTargetStillAlive: engagedAlive,
             targetIsDead: targetIsDead,
             engagedTargetDied: engagedDied,
@@ -108,7 +123,7 @@ public sealed unsafe class AutoAttackService : IAutoAttackService
             playerAlive: true,
             inCombat: inCombat,
             currentlyAutoAttacking: currentlyAa,
-            hasLivingHostileTarget: hasLivingHostile,
+            hasLivingHostileTarget: livingForHold,
             targetIsDead: targetIsDead,
             engagedTargetStillAlive: engagedAlive,
             engagedTargetDied: engagedDied,
@@ -136,6 +151,8 @@ public sealed unsafe class AutoAttackService : IAutoAttackService
         if (IsDead(enemy))
             return (false, true);
 
+        // Still alive as long as hostile and not dead — do not require IsTargetable
+        // (targetable flickers are common at low HP / death animations).
         return (IsHostile(enemy), false);
     }
 
@@ -147,8 +164,11 @@ public sealed unsafe class AutoAttackService : IAutoAttackService
     private static bool IsDead(IBattleNpc enemy) =>
         enemy.IsDead || enemy.CurrentHp == 0;
 
+    private static bool IsHostileAlive(IBattleNpc enemy) =>
+        IsHostile(enemy) && !IsDead(enemy);
+
     private static bool IsLivingHostile(IBattleNpc enemy) =>
-        IsHostile(enemy) && !IsDead(enemy) && enemy.IsTargetable;
+        IsHostileAlive(enemy) && enemy.IsTargetable;
 
     private void ClearHold()
     {
