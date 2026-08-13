@@ -11,11 +11,11 @@ public static class DamageEngagementDecision
     public const float PullBootstrapRangeYalms = 30f;
 
     /// <summary>
-    /// Hostiles within this distance of an InCombat enemy (or the hard target) are treated
-    /// as part of the same pack for AoE counting — pack adds often lag on InCombat after pull.
-    /// Distant adjacent packs stay blocked.
+    /// Hostiles within this distance of an engaged pack member join the cluster for AoE
+    /// counting (lagging InCombat flags / loose tank stacks). Flood-filled so chains of
+    /// adds in a pull all unlock. Distant adjacent packs stay blocked.
     /// </summary>
-    public const float PackClusterLinkYalms = 8f;
+    public const float PackClusterLinkYalms = 12f;
 
     /// <summary>
     /// Whether <paramref name="enemy"/> may be selected for damage this frame.

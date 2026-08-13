@@ -234,15 +234,16 @@ public sealed class TargetingService : ITargetingService
     /// <returns>Number of valid enemies within radius.</returns>
     public int CountEnemiesInRange(float radius, IPlayerCharacter player)
     {
-        // Sustained no-target pause → report 0 so AoE thresholds can't trigger during gaze.
-        // OOC / brief retarget gaps are not paused (see DamagePauseDecision).
         if (IsDamageTargetingPaused(player))
             return 0;
 
+        // AoE threshold counting ignores LoS — pack members behind each other / pillars
+        // must still raise the count so we switch off ST in full pulls.
         int count = 0;
-        foreach (var enemy in GetValidEnemies(radius, player))
+        CollectHostilesInRange(radius, player, requireLineOfSight: false, _aoeWorkList);
+        for (var i = 0; i < _aoeWorkList.Count; i++)
         {
-            if (!IsEnemySelectableForDamage(enemy, player))
+            if (!IsEnemySelectableForDamage(_aoeWorkList[i], player))
                 continue;
             count++;
         }
@@ -253,10 +254,6 @@ public sealed class TargetingService : ITargetingService
     /// Finds the enemy that has the most other enemies within the specified radius.
     /// Used for targeted AoE spells like Glare IV and Afflatus Misery.
     /// </summary>
-    /// <param name="aoeRadius">Radius around the target to count enemies.</param>
-    /// <param name="maxRange">Maximum range from player to target.</param>
-    /// <param name="player">Current player character.</param>
-    /// <returns>Best AoE target and count of enemies that will be hit (including target).</returns>
     public (IBattleNpc? target, int hitCount) FindBestAoETarget(float aoeRadius, float maxRange, IPlayerCharacter player)
     {
         if (IsDamageTargetingPaused(player))
@@ -265,28 +262,23 @@ public sealed class TargetingService : ITargetingService
         IBattleNpc? bestTarget = null;
         int bestHitCount = 0;
 
-        // Collect selectable enemies only — same engagement gate as Count/Find*
-        // so AoE centering cannot disagree with AoE threshold / ST targeting.
-        _aoeWorkList.Clear();
-        foreach (var enemy in GetValidEnemies(maxRange, player))
+        // Ignore LoS for AoE decisions (same as CountEnemiesInRange).
+        CollectHostilesInRange(maxRange, player, requireLineOfSight: false, _aoeWorkList);
+        for (var i = _aoeWorkList.Count - 1; i >= 0; i--)
         {
-            if (!IsEnemySelectableForDamage(enemy, player))
-                continue;
-            _aoeWorkList.Add(enemy);
+            if (!IsEnemySelectableForDamage(_aoeWorkList[i], player))
+                _aoeWorkList.RemoveAt(i);
         }
 
         if (_aoeWorkList.Count == 0)
             return (null, 0);
 
-        // Early exit: if only 1 enemy, no need for O(n²) calculation
         if (_aoeWorkList.Count == 1)
             return (_aoeWorkList[0], 1);
 
-        // For each potential target, count how many enemies would be hit.
-        // Inflate splash by the other enemy's hitbox so loose tank stacks still count.
         foreach (var potentialTarget in _aoeWorkList)
         {
-            int hitCount = 1; // Always hits the target itself
+            int hitCount = 1;
 
             foreach (var other in _aoeWorkList)
             {
@@ -625,29 +617,35 @@ public sealed class TargetingService : ITargetingService
 
         _soleBootstrapHostileId = hostileCount == 1 ? soleId : 0UL;
 
-        // Pass 2: one-hop link — pack adds lagging InCombat near a seed.
+        // Pass 2: flood-fill pack cluster so chained adds (A–B–C) all unlock for AoE.
         if (_engagedPackClusterIds.Count == 0 || _bootstrapScratch.Count == 0)
             return;
 
-        for (var i = 0; i < _bootstrapScratch.Count; i++)
+        bool grew;
+        do
         {
-            var candidate = _bootstrapScratch[i];
-            if (_engagedPackClusterIds.Contains(candidate.GameObjectId))
-                continue;
-
-            for (var j = 0; j < _bootstrapScratch.Count; j++)
+            grew = false;
+            for (var i = 0; i < _bootstrapScratch.Count; i++)
             {
-                var seed = _bootstrapScratch[j];
-                if (!_engagedPackClusterIds.Contains(seed.GameObjectId))
+                var candidate = _bootstrapScratch[i];
+                if (_engagedPackClusterIds.Contains(candidate.GameObjectId))
                     continue;
 
-                if (Vector3.DistanceSquared(candidate.Position, seed.Position) <= linkSq)
+                for (var j = 0; j < _bootstrapScratch.Count; j++)
                 {
-                    _engagedPackClusterIds.Add(candidate.GameObjectId);
-                    break;
+                    var seed = _bootstrapScratch[j];
+                    if (!_engagedPackClusterIds.Contains(seed.GameObjectId))
+                        continue;
+
+                    if (Vector3.DistanceSquared(candidate.Position, seed.Position) <= linkSq)
+                    {
+                        _engagedPackClusterIds.Add(candidate.GameObjectId);
+                        grew = true;
+                        break;
+                    }
                 }
             }
-        }
+        } while (grew);
     }
 
     private ulong GetSoleBootstrapHostileId(IPlayerCharacter player)
@@ -811,7 +809,7 @@ public sealed class TargetingService : ITargetingService
     }
 
     /// <summary>
-    /// Gets valid enemies in range, using cache when available.
+    /// Gets valid enemies in range, using cache when available (LoS applied when configured).
     /// </summary>
     private IEnumerable<IBattleNpc> GetValidEnemies(float maxRange, IPlayerCharacter player)
     {
@@ -821,7 +819,6 @@ public sealed class TargetingService : ITargetingService
             cacheAge < _configuration.Targeting.TargetCacheTtlMs &&
             Math.Abs(_lastCacheRange - maxRange) < 0.1f)
         {
-            // Validate cached entries are still valid (O(n) with RemoveAll vs O(n²) with RemoveAt)
             _cachedEnemies.RemoveAll(e => !IsStillValid(e));
 
             if (_cachedEnemies.Count > 0)
@@ -832,12 +829,26 @@ public sealed class TargetingService : ITargetingService
             }
         }
 
-        // Rebuild cache (collect first, then filter — do not yield mid-rebuild).
-        _cachedEnemies.Clear();
+        CollectHostilesInRange(maxRange, player, requireLineOfSight: true, _cachedEnemies);
         _lastCacheRange = maxRange;
         _cacheTimer.Restart();
 
-        // Collect stop-mark IDs once per rebuild so we don't call the probe per enemy
+        foreach (var enemy in _cachedEnemies)
+            yield return enemy;
+    }
+
+    /// <summary>
+    /// Collects hostiles in range into <paramref name="into"/>. Used by ST Find (with LoS)
+    /// and AoE Count/FindBestAoETarget (without LoS so full packs are not under-counted).
+    /// </summary>
+    private void CollectHostilesInRange(
+        float maxRange,
+        IPlayerCharacter player,
+        bool requireLineOfSight,
+        List<IBattleNpc> into)
+    {
+        into.Clear();
+
         _stopMarkedIds.Clear();
         if (_configuration.Targeting.FilterStopMarkers && _markerProbe != null)
         {
@@ -850,73 +861,50 @@ public sealed class TargetingService : ITargetingService
         var hardTargetId = _targetManager.Target is IBattleNpc hardTarget
             ? hardTarget.GameObjectId
             : 0UL;
+        var losEnabled = requireLineOfSight && _configuration.Targeting.EnableLineOfSightFiltering;
 
         foreach (var obj in _objectTable)
         {
-            // Cheapest checks first
             if (obj.ObjectKind != ObjectKind.BattleNpc)
                 continue;
-
-            // Type cast early so we can exempt the hard target from IsTargetable flicker.
             if (obj is not IBattleNpc npc)
                 continue;
 
             var isHardTarget = hardTargetId != 0UL && npc.GameObjectId == hardTargetId;
 
-            // Bosses briefly drop IsTargetable during timeline events; keep the hard target
-            // so DPS does not go idle for the whole dodge sequence (Anthracite, etc.).
             if (!obj.IsTargetable && !isHardTarget)
                 continue;
-
             if (obj.IsDead)
                 continue;
-
-            // Quick yalm-based range pre-filter (generous buffer for large hitboxes)
             if (obj.CurrentDistance > maxRangeYalms + (int)Math.Ceiling(obj.HitboxRadius))
                 continue;
-
-            // Check if hostile (enemy or striking dummy)
             if ((byte)npc.BattleNpcKind != Olympus.Compat.BattleNpcKinds.Combatant && npc.SubKind != 0)
                 continue;
 
-            // Precise distance check — effective range includes both hitbox radii
             var effectiveRange = maxRange + npc.HitboxRadius + player.HitboxRadius;
             if (Vector3.DistanceSquared(playerPos, npc.Position) > effectiveRange * effectiveRange)
                 continue;
 
-            // Line-of-sight check — reject enemies behind walls/pillars.
-            // Hard target is exempt: seal geometry / arena pillars must not null Find
-            // at boss pull when the player already selected the boss.
-            if (!isHardTarget &&
-                _configuration.Targeting.EnableLineOfSightFiltering &&
-                !HasLineOfSight(playerPos, npc.Position))
+            if (!isHardTarget && losEnabled && !HasLineOfSight(playerPos, npc.Position))
                 continue;
 
-            // Invulnerability check — skip enemies with known invuln status effects
-            // (boss phase transitions, invulnerable adds, untouchable objects).
-            // Never skip the player's hard target — keep attacking until it dies.
             if (!isHardTarget &&
                 _configuration.Targeting.EnableInvulnerabilityFiltering &&
                 HasInvulnerabilityStatus(npc))
                 continue;
 
-            // Stop-marker exclusion — skip enemies a party leader has flagged with Stop1/Stop2.
-            // Never skip the player's hard target.
             if (!isHardTarget &&
                 _stopMarkedIds.Count > 0 &&
                 _stopMarkedIds.Contains(npc.GameObjectId))
                 continue;
 
-            _cachedEnemies.Add(npc);
+            into.Add(npc);
         }
 
-        // Prefer targetable enemies. Keep an untargetable hard target only when it is the
-        // sole candidate (brief boss IsTargetable flicker). Dual-boss water swaps
-        // (Akadaemia Anyder sharks) must not keep the diving shark selected for damage.
         var hasTargetable = false;
-        for (var i = 0; i < _cachedEnemies.Count; i++)
+        for (var i = 0; i < into.Count; i++)
         {
-            if (_cachedEnemies[i].IsTargetable)
+            if (into[i].IsTargetable)
             {
                 hasTargetable = true;
                 break;
@@ -924,10 +912,7 @@ public sealed class TargetingService : ITargetingService
         }
 
         if (hasTargetable)
-            _cachedEnemies.RemoveAll(static e => !e.IsTargetable);
-
-        foreach (var enemy in _cachedEnemies)
-            yield return enemy;
+            into.RemoveAll(static e => !e.IsTargetable);
     }
 
     private bool IsValidEnemy(IBattleNpc enemy, float maxRange, IPlayerCharacter player, bool allowUntargetable = false)

@@ -186,16 +186,31 @@ public sealed class EngagementFilterTests
     }
 
     [Fact]
+    public void PlayerOutOfCombat_ChainedPackAdds_FloodFillUnlocksAll()
+    {
+        // A engaged, B and C lag InCombat but form a chain within link range.
+        var a = MakeEnemy(50, hp: 8_000, StatusFlags.InCombat, pos: new Vector3(0f, 0f, 0f));
+        var b = MakeEnemy(51, hp: 5_000, flags: 0, pos: new Vector3(10f, 0f, 0f));
+        var c = MakeEnemy(52, hp: 4_000, flags: 0, pos: new Vector3(20f, 0f, 0f));
+
+        var svc = BuildService([a.Object, b.Object, c.Object], currentTarget: a.Object);
+        var player = MakePlayer(flags: 0);
+
+        Assert.Equal(3, svc.CountEnemiesInRange(30f, player));
+        Assert.Equal(3, svc.FindBestAoETarget(12f, 30f, player).hitCount);
+    }
+
+    [Fact]
     public void PlayerOutOfCombat_HardTargetInCombat_DoesNotUnlockDistantPack()
     {
         var hardTarget = MakeEnemy(40, hp: 8_000, StatusFlags.InCombat, pos: new Vector3(0f, 0f, 0f));
-        var distant = MakeEnemy(41, hp: 500, flags: 0, pos: new Vector3(20f, 0f, 0f));
+        var distant = MakeEnemy(41, hp: 500, flags: 0, pos: new Vector3(25f, 0f, 0f));
 
         var svc = BuildService([hardTarget.Object, distant.Object], currentTarget: hardTarget.Object);
         var player = MakePlayer(flags: 0);
 
-        Assert.Equal(1, svc.CountEnemiesInRange(25f, player));
-        var lowest = svc.FindEnemy(EnemyTargetingStrategy.LowestHp, 25f, player);
+        Assert.Equal(1, svc.CountEnemiesInRange(30f, player));
+        var lowest = svc.FindEnemy(EnemyTargetingStrategy.LowestHp, 30f, player);
         Assert.NotNull(lowest);
         Assert.Equal(40ul, lowest!.GameObjectId);
     }
