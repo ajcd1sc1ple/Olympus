@@ -329,7 +329,7 @@ public static class MockBuilders
 
         // Default: not paused, no user target, gap closers allowed — these safety checks
         // always evaluate to "permissive" in tests unless a specific test overrides them.
-        mock.Setup(x => x.IsDamageTargetingPaused()).Returns(false);
+        mock.Setup(x => x.IsDamageTargetingPaused(It.IsAny<IPlayerCharacter?>())).Returns(false);
         mock.Setup(x => x.GetUserEnemyTarget()).Returns((IBattleNpc?)null);
 
         var gapCloserSafetyMock = new Mock<IGapCloserSafetyService>();

@@ -49,7 +49,7 @@ public sealed class DamageModule : IHecateModule
             context.Debug.DamageState = "Not in combat";
             return;
         }
-        if (context.TargetingService.IsDamageTargetingPaused())
+        if (context.TargetingService.IsDamageTargetingPaused(context.Player))
         {
             context.Debug.DamageState = "Paused (no target)";
             // During combat downtime (boss jump): push Umbral Soul to maintain ice

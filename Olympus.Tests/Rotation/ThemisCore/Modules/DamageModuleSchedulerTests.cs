@@ -95,7 +95,7 @@ public class DamageModuleSchedulerTests
     public void CollectCandidates_TargetingPaused_PushesNothing()
     {
         var targeting = MockBuilders.CreateMockTargetingService();
-        targeting.Setup(x => x.IsDamageTargetingPaused()).Returns(true);
+        targeting.Setup(x => x.IsDamageTargetingPaused(It.IsAny<IPlayerCharacter?>())).Returns(true);
 
         var scheduler = SchedulerFactory.CreateForTest();
         var context = ThemisTestContext.Create(targetingService: targeting, inCombat: true);

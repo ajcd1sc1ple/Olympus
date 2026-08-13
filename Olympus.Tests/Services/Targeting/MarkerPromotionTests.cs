@@ -82,7 +82,7 @@ public sealed class MarkerPromotionTests
         var gapCloserMock = new Mock<IGapCloserSafetyService>();
 
         // Force TTL=0 so the cache never suppresses a fresh rebuild, and disable
-        // PauseWhenNoTarget so IsDamageTargetingPaused() never short-circuits.
+        // PauseWhenNoTarget so IsDamageTargetingPaused never short-circuits.
         config.Targeting.TargetCacheTtlMs = 0;
         config.Targeting.PauseWhenNoTarget = false;
 

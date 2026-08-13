@@ -156,7 +156,7 @@ public class DamageModuleTests
         var player = MockBuilders.CreateMockPlayerCharacter(level: playerLevel);
 
         var targeting = new Mock<ITargetingService>();
-        targeting.Setup(t => t.IsDamageTargetingPaused()).Returns(false);
+        targeting.Setup(t => t.IsDamageTargetingPaused(It.IsAny<IPlayerCharacter?>())).Returns(false);
 
         var ctx = new Mock<IApolloContext>();
         ctx.Setup(x => x.InCombat).Returns(true);

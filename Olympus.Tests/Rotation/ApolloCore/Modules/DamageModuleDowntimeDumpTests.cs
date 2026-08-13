@@ -151,7 +151,7 @@ public sealed class DamageModuleDowntimeDumpTests : IDisposable
         var player = MockBuilders.CreateMockPlayerCharacter(level: playerLevel);
 
         var targeting = new Mock<ITargetingService>();
-        targeting.Setup(t => t.IsDamageTargetingPaused()).Returns(false);
+        targeting.Setup(t => t.IsDamageTargetingPaused(It.IsAny<Dalamud.Game.ClientState.Objects.SubKinds.IPlayerCharacter?>())).Returns(false);
         targeting
             .Setup(t => t.FindBestAoETarget(It.IsAny<float>(), It.IsAny<float>(), player.Object))
             .Returns((MakeEnemy(99u).Object, 1));

@@ -55,10 +55,12 @@ public interface ITargetingService
     /// <summary>
     /// Returns true when damage targeting should be paused because the player has no
     /// selected target and <see cref="Config.TargetingConfig.PauseWhenNoTarget"/> is ON.
-    /// Damage modules can check this to set a clear "Paused (no target)" debug state
-    /// before any target acquisition is attempted.
+    /// Brief Tab-retarget null gaps do not pause; sustained drops (gaze) do.
+    /// When <paramref name="player"/> is provided and out of combat, never pauses so
+    /// combat bootstrap can see tank-engaged enemies. Damage modules should pass
+    /// <c>context.Player</c> for accurate OOC behavior.
     /// </summary>
-    bool IsDamageTargetingPaused();
+    bool IsDamageTargetingPaused(IPlayerCharacter? player = null);
 
     /// <summary>
     /// Returns the player's currently selected target, if any, as an <see cref="IBattleNpc"/>.

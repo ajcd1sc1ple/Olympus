@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Numerics;
+using System.Threading;
 using Dalamud.Game.ClientState.Objects;
 using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.SubKinds;
@@ -49,7 +50,8 @@ public sealed class EngagementFilterTests
 
     private static TargetingService BuildService(
         IEnumerable<IBattleNpc> enemies,
-        IGameObject? currentTarget = null)
+        IGameObject? currentTarget = null,
+        bool pauseWhenNoTarget = true)
     {
         var objectTableMock = new Mock<IObjectTable>();
         var enemyList = new List<IGameObject>();
@@ -70,7 +72,8 @@ public sealed class EngagementFilterTests
 
         var config = new Configuration();
         config.Targeting.TargetCacheTtlMs = 0;
-        config.Targeting.PauseWhenNoTarget = false;
+        config.Targeting.PauseWhenNoTarget = pauseWhenNoTarget;
+        config.Targeting.StrictCurrentTargetStrategy = true;
 
         return new TargetingService(
             objectTableMock.Object,
@@ -149,15 +152,65 @@ public sealed class EngagementFilterTests
     public void PlayerOutOfCombat_EngagedBossWithoutHardTarget_IsSelectable()
     {
         // Tank already pulled: boss has InCombat, healer still OOC and may have the tank
-        // (or nothing) targeted. Count/Find must still see the boss so combat bootstrap works.
+        // (or nothing) targeted. Count/Find must still see the boss so combat bootstrap works
+        // even with default PauseWhenNoTarget (OOC never pauses).
         var boss = MakeEnemy(7, hp: 1_000_000, StatusFlags.InCombat);
 
         var svc = BuildService([boss.Object], currentTarget: null);
         var player = MakePlayer(flags: 0);
 
+        Assert.False(svc.IsDamageTargetingPaused(player));
         Assert.Equal(1, svc.CountEnemiesInRange(30f, player));
         var target = svc.FindEnemy(EnemyTargetingStrategy.LowestHp, 30f, player);
         Assert.NotNull(target);
         Assert.Equal(7ul, target!.GameObjectId);
+    }
+
+    [Fact]
+    public void PlayerInCombat_BriefNullHardTarget_DoesNotPauseFindOrCount()
+    {
+        // Tab retarget: hard target is briefly null while StatusFlags.InCombat stays set.
+        // PauseWhenNoTarget must not zero Count/Find or DPS stalls mid-pack (Anyder sharks).
+        var sharkA = MakeEnemy(10, hp: 8_000, StatusFlags.InCombat);
+        var sharkB = MakeEnemy(11, hp: 4_000, flags: 0); // add lagging InCombat
+
+        var svc = BuildService([sharkA.Object, sharkB.Object], currentTarget: null);
+        var player = MakePlayer(StatusFlags.InCombat);
+
+        Assert.False(svc.IsDamageTargetingPaused(player));
+        Assert.Equal(2, svc.CountEnemiesInRange(25f, player));
+        var lowest = svc.FindEnemy(EnemyTargetingStrategy.LowestHp, 25f, player);
+        Assert.NotNull(lowest);
+        Assert.Equal(11ul, lowest!.GameObjectId);
+    }
+
+    [Fact]
+    public void PlayerInCombat_SustainedNullHardTarget_PausesAfterGrace()
+    {
+        var shark = MakeEnemy(12, hp: 8_000, StatusFlags.InCombat);
+        var svc = BuildService([shark.Object], currentTarget: null);
+        var player = MakePlayer(StatusFlags.InCombat);
+
+        Assert.False(svc.IsDamageTargetingPaused(player));
+
+        Thread.Sleep(DamagePauseDecision.NoTargetGraceMs + 50);
+
+        Assert.True(svc.IsDamageTargetingPaused(player));
+        Assert.Equal(0, svc.CountEnemiesInRange(25f, player));
+        Assert.Null(svc.FindEnemy(EnemyTargetingStrategy.LowestHp, 25f, player));
+    }
+
+    [Fact]
+    public void StrictCurrentTarget_BriefNull_FallsBackToLowestHp()
+    {
+        var sharkA = MakeEnemy(13, hp: 8_000, StatusFlags.InCombat);
+        var sharkB = MakeEnemy(14, hp: 3_000, StatusFlags.InCombat);
+
+        var svc = BuildService([sharkA.Object, sharkB.Object], currentTarget: null);
+        var player = MakePlayer(StatusFlags.InCombat);
+
+        var target = svc.FindEnemy(EnemyTargetingStrategy.CurrentTarget, 25f, player);
+        Assert.NotNull(target);
+        Assert.Equal(14ul, target!.GameObjectId);
     }
 }

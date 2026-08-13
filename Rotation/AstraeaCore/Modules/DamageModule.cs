@@ -40,7 +40,7 @@ public sealed class DamageModule : BaseDamageModule<IAstraeaContext>, IAstraeaMo
         // Hostile hard target → keep DPS even before server InCombat flips.
         if (!context.InCombat && context.TargetingService.GetUserEnemyTarget() == null)
             return;
-        if (context.TargetingService.IsDamageTargetingPaused()) { SetDpsState(context, "Paused (no target)"); return; }
+        if (context.TargetingService.IsDamageTargetingPaused(context.Player)) { SetDpsState(context, "Paused (no target)"); return; }
         if (context.Configuration.Targeting.SuppressDamageOnForcedMovement
             && PlayerSafetyHelper.IsForcedMovementActive(context.Player))
         {

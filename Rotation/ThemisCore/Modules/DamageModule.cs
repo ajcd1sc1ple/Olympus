@@ -40,7 +40,7 @@ public sealed class DamageModule : IThemisModule
             return;
         }
 
-        if (context.TargetingService.IsDamageTargetingPaused())
+        if (context.TargetingService.IsDamageTargetingPaused(context.Player))
         {
             context.Debug.DamageState = "Paused (no target)";
             return;

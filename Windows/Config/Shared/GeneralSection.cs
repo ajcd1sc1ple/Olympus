@@ -118,7 +118,7 @@ public sealed class GeneralSection
             () => this.config.Targeting.PauseWhenNoTarget,
             v => this.config.Targeting.PauseWhenNoTarget = v,
             Loc.T(LocalizedStrings.Targeting.PauseWhenNoTargetDesc,
-                "Stop attacking when you drop your target. Lets you look away for gaze mechanics or disengage without Olympus picking a new enemy."),
+                "Stop attacking after you drop your target (brief Tab switches are ignored). Lets you look away for gaze mechanics or disengage without Olympus picking a new enemy."),
             this.save);
 
         ConfigUIHelpers.Toggle(
@@ -150,7 +150,7 @@ public sealed class GeneralSection
             () => this.config.Targeting.StrictCurrentTargetStrategy,
             v => this.config.Targeting.StrictCurrentTargetStrategy = v,
             Loc.T(LocalizedStrings.Targeting.StrictCurrentTargetStrategyDesc,
-                "When using Current Target or Focus Target strategy, never fall back to another enemy if yours is gone."),
+                "When using Current Target or Focus Target strategy, do not keep a new enemy after you drop yours (brief Tab switches still fall back so DPS does not stall)."),
             this.save);
 
         ConfigUIHelpers.Toggle(

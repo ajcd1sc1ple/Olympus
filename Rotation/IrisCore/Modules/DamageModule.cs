@@ -55,7 +55,7 @@ public sealed class DamageModule : IIrisModule
 
         if (context.IsCasting && !context.CanSlidecast) return;
 
-        if (context.TargetingService.IsDamageTargetingPaused())
+        if (context.TargetingService.IsDamageTargetingPaused(context.Player))
         {
             context.Debug.DamageState = "Paused (no target)";
             // During combat downtime (boss jump): paint missing motifs so three instant

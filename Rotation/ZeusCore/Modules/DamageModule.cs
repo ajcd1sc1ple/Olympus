@@ -45,7 +45,7 @@ public sealed class DamageModule : IZeusModule
             return;
         }
 
-        if (context.TargetingService.IsDamageTargetingPaused())
+        if (context.TargetingService.IsDamageTargetingPaused(context.Player))
         {
             context.Debug.DamageState = "Paused (no target)";
             return;

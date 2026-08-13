@@ -32,7 +32,7 @@ public class DamageModuleDowntimeTests
     private static Mock<ITargetingService> CreatePausedTargeting()
     {
         var targeting = MockBuilders.CreateMockTargetingService();
-        targeting.Setup(x => x.IsDamageTargetingPaused()).Returns(true);
+        targeting.Setup(x => x.IsDamageTargetingPaused(It.IsAny<IPlayerCharacter?>())).Returns(true);
         return targeting;
     }
 

@@ -71,7 +71,7 @@ public class DamageModuleBurstTests : IDisposable
         var player = MockBuilders.CreateMockPlayerCharacter(level: playerLevel);
 
         var targeting = new Mock<ITargetingService>();
-        targeting.Setup(t => t.IsDamageTargetingPaused()).Returns(false);
+        targeting.Setup(t => t.IsDamageTargetingPaused(It.IsAny<IPlayerCharacter?>())).Returns(false);
         // Wire up a generic enemy for the AoE target calls.
         targeting
             .Setup(t => t.FindBestAoETarget(It.IsAny<float>(), It.IsAny<float>(), player.Object))

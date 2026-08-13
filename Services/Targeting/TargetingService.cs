@@ -37,6 +37,10 @@ public sealed class TargetingService : ITargetingService
     // Reusable set for stop-mark IDs; rebuilt each GetValidEnemies cache flush (no per-frame alloc)
     private readonly HashSet<ulong> _stopMarkedIds = new(2);
 
+    // Tracks when the hard target first became null so PauseWhenNoTarget can grace
+    // brief Tab-retarget gaps without stalling DPS (gaze still pauses after grace).
+    private long? _noTargetSinceTickMs;
+
     // Tank job IDs: PLD=19, WAR=21, DRK=32, GNB=37
     private static readonly HashSet<uint> TankJobIds = [19, 21, 32, 37];
 
@@ -62,12 +66,55 @@ public sealed class TargetingService : ITargetingService
     /// <summary>
     /// Returns true when damage targeting should be suppressed because the player has
     /// dropped their target and <see cref="Config.TargetingConfig.PauseWhenNoTarget"/> is on.
-    /// This is the primary safeguard for gaze mechanics and any moment the player wants
-    /// Olympus to stop attacking — dropping the target is a hard pause signal.
+    /// A brief null hard target (Tab retarget) does not pause — only a sustained drop
+    /// past <see cref="DamagePauseDecision.NoTargetGraceMs"/> does (gaze / disengage).
+    /// Out of combat, never pauses when <paramref name="player"/> is provided: the
+    /// engagement filter already blocks unpulled packs, and combat bootstrap needs
+    /// Count/Find to see tank-engaged enemies without a hard target.
     /// </summary>
-    public bool IsDamageTargetingPaused()
+    public bool IsDamageTargetingPaused(IPlayerCharacter? player = null)
     {
-        return _configuration.Targeting.PauseWhenNoTarget && _targetManager.Target == null;
+        var hasHardTarget = _targetManager.Target != null;
+        var noTargetDurationMs = UpdateNoTargetDurationMs(hasHardTarget);
+        bool? playerInCombat = player == null
+            ? null
+            : (player.StatusFlags & StatusFlags.InCombat) != 0;
+
+        return DamagePauseDecision.ShouldPause(
+            pauseWhenNoTarget: _configuration.Targeting.PauseWhenNoTarget,
+            hasHardTarget: hasHardTarget,
+            playerInCombat: playerInCombat,
+            noTargetDurationMs: noTargetDurationMs);
+    }
+
+    /// <summary>
+    /// Advances / resets the null-hard-target timer. Returns continuous null duration in ms.
+    /// </summary>
+    private long UpdateNoTargetDurationMs(bool hasHardTarget)
+    {
+        if (hasHardTarget)
+        {
+            _noTargetSinceTickMs = null;
+            return 0;
+        }
+
+        var now = Environment.TickCount64;
+        _noTargetSinceTickMs ??= now;
+        return now - _noTargetSinceTickMs.Value;
+    }
+
+    /// <summary>
+    /// Whether CurrentTarget/FocusTarget may fall back to LowestHp this frame.
+    /// Strict mode still allows fallback during the retarget grace window.
+    /// </summary>
+    private bool AllowExplicitTargetFallback()
+    {
+        var hasHardTarget = _targetManager.Target != null;
+        var noTargetDurationMs = UpdateNoTargetDurationMs(hasHardTarget);
+        return DamagePauseDecision.AllowExplicitTargetFallback(
+            strictCurrentTargetStrategy: _configuration.Targeting.StrictCurrentTargetStrategy,
+            hasHardTarget: hasHardTarget,
+            noTargetDurationMs: noTargetDurationMs);
     }
 
     /// <inheritdoc />
@@ -85,8 +132,9 @@ public sealed class TargetingService : ITargetingService
     /// <returns>Best target according to strategy, or null if none found.</returns>
     public IBattleNpc? FindEnemy(EnemyTargetingStrategy strategy, float maxRange, IPlayerCharacter player)
     {
-        // Hard pause: player has no target and PauseWhenNoTarget is on. Covers gaze mechanics.
-        if (IsDamageTargetingPaused())
+        // Hard pause: sustained null hard target with PauseWhenNoTarget (gaze / disengage).
+        // Brief Tab-retarget gaps and OOC bootstrap are not paused — see DamagePauseDecision.
+        if (IsDamageTargetingPaused(player))
             return null;
 
         // Try primary strategy
@@ -99,10 +147,10 @@ public sealed class TargetingService : ITargetingService
         }
 
         // If CurrentTarget/FocusTarget fails, fall back to LowestHp — unless strict mode
-        // is on, in which case an explicit-target strategy with no target stays empty
-        // (prevents auto-retargeting when the player is trying to stop attacking)
+        // is committed (sustained null past grace). During the retarget grace window even
+        // strict mode falls back so Tab between pack members does not stall DPS.
         if (target == null && strategy is EnemyTargetingStrategy.CurrentTarget or EnemyTargetingStrategy.FocusTarget
-            && !_configuration.Targeting.StrictCurrentTargetStrategy)
+            && AllowExplicitTargetFallback())
         {
             target = FindEnemyByStrategy(EnemyTargetingStrategy.LowestHp, maxRange, player);
         }
@@ -129,8 +177,8 @@ public sealed class TargetingService : ITargetingService
         float maxRange,
         IPlayerCharacter player)
     {
-        // Hard pause: player has no target — don't DoT anything.
-        if (IsDamageTargetingPaused())
+        // Hard pause: sustained null hard target — don't DoT anything.
+        if (IsDamageTargetingPaused(player))
             return null;
 
         var strategy = _configuration.Targeting.EnemyStrategy;
@@ -180,8 +228,9 @@ public sealed class TargetingService : ITargetingService
     /// <returns>Number of valid enemies within radius.</returns>
     public int CountEnemiesInRange(float radius, IPlayerCharacter player)
     {
-        // Hard pause: no target → report 0 enemies so AoE thresholds can't trigger.
-        if (IsDamageTargetingPaused())
+        // Sustained no-target pause → report 0 so AoE thresholds can't trigger during gaze.
+        // OOC / brief retarget gaps are not paused (see DamagePauseDecision).
+        if (IsDamageTargetingPaused(player))
             return 0;
 
         int count = 0;
@@ -204,8 +253,7 @@ public sealed class TargetingService : ITargetingService
     /// <returns>Best AoE target and count of enemies that will be hit (including target).</returns>
     public (IBattleNpc? target, int hitCount) FindBestAoETarget(float aoeRadius, float maxRange, IPlayerCharacter player)
     {
-        // Hard pause: no target.
-        if (IsDamageTargetingPaused())
+        if (IsDamageTargetingPaused(player))
             return (null, 0);
 
         IBattleNpc? bestTarget = null;
@@ -260,8 +308,7 @@ public sealed class TargetingService : ITargetingService
     /// <inheritdoc />
     public IBattleNpc? FindEnemyForAction(EnemyTargetingStrategy strategy, uint actionId, IPlayerCharacter player)
     {
-        // Hard pause: no target → no damage targeting at all.
-        if (IsDamageTargetingPaused())
+        if (IsDamageTargetingPaused(player))
             return null;
 
         var target = FindEnemyByActionStrategy(strategy, actionId, player);
@@ -269,11 +316,10 @@ public sealed class TargetingService : ITargetingService
         if (target == null && strategy == EnemyTargetingStrategy.TankAssist && _configuration.Targeting.UseTankAssistFallback)
             target = FindEnemyByActionStrategy(EnemyTargetingStrategy.LowestHp, actionId, player);
 
-        // Fall back from explicit-target strategies to LowestHp only when strict mode
-        // is off. Strict mode keeps explicit-target intent as a hard stop — important
-        // for players who use CurrentTarget to manually control every engagement.
+        // Fall back from explicit-target strategies to LowestHp during retarget grace or
+        // when strict mode is off. Sustained null + strict stays empty (gaze / stop).
         if (target == null && strategy is EnemyTargetingStrategy.CurrentTarget or EnemyTargetingStrategy.FocusTarget
-            && !_configuration.Targeting.StrictCurrentTargetStrategy)
+            && AllowExplicitTargetFallback())
             target = FindEnemyByActionStrategy(EnemyTargetingStrategy.LowestHp, actionId, player);
 
         return target;
@@ -840,7 +886,7 @@ public sealed class TargetingService : ITargetingService
     public (IBattleNpc? target, int hitCount, float optimalAngle) FindBestConeAoETarget(
         float coneHalfAngle, float radius, float maxRange, IPlayerCharacter player)
     {
-        if (IsDamageTargetingPaused())
+        if (IsDamageTargetingPaused(player))
             return (null, 0, 0f);
 
         // Use the ability's effect range for candidate filtering, not the rotation's targeting range
@@ -903,7 +949,7 @@ public sealed class TargetingService : ITargetingService
     public (IBattleNpc? target, int hitCount, float optimalAngle) FindBestLineAoETarget(
         float lineWidth, float length, float maxRange, IPlayerCharacter player)
     {
-        if (IsDamageTargetingPaused())
+        if (IsDamageTargetingPaused(player))
             return (null, 0, 0f);
 
         // Use the ability's effect range for candidate filtering, not the rotation's targeting range
