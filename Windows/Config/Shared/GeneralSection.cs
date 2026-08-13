@@ -258,12 +258,12 @@ public sealed class GeneralSection
             () => this.config.EnableOrbwalkerIntegration,
             v => this.config.EnableOrbwalkerIntegration = v,
             Loc.T(LocalizedStrings.General.EnableOrbwalkerIntegrationDesc,
-                "When Orbwalker is installed and enabled for your job, hardcasts are allowed while moving — Orbwalker locks movement (same model as WrathCombo Auto-Rotation)."),
+                "When Orbwalker locks movement for your job (Buffer / combat force-stop), hardcasts are allowed; while still pathing unlocked, instant fillers keep casting."),
             this.save);
 
         ImGui.TextDisabled(GetOrbwalkerStatusText());
         ImGui.TextDisabled(Loc.T(LocalizedStrings.General.OrbwalkerHelp,
-            "Install from puni.sh/plugin/Orbwalker. Enable the plugin and your job in /orbwalker. Enable Buffer Initial Cast and combat force-stop / slidecast for best results."));
+            "Install from puni.sh/plugin/Orbwalker. Enable the plugin and your job in /orbwalker. Enable Buffer Initial Cast and combat force-stop / slidecast so Orbwalker locks before each hardcast."));
     }
 
     private string GetOrbwalkerStatusText()

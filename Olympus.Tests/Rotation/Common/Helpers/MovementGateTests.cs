@@ -37,7 +37,9 @@ public class MovementGateTests
     public void ThresholdSquaredFor_BossModIsMoreForgiving()
     {
         Assert.True(MovementGate.ThresholdSquaredFor(true) > MovementGate.ThresholdSquaredFor(false));
-        Assert.True(MovementGate.SpeedThresholdFor(true) > MovementGate.SpeedThresholdFor(false));
+        // Speed floor is shared — elevated BossMod floors missed slow WASD strafes.
+        Assert.Equal(MovementGate.DefaultSpeedThreshold, MovementGate.SpeedThresholdFor(true));
+        Assert.Equal(MovementGate.DefaultSpeedThreshold, MovementGate.SpeedThresholdFor(false));
     }
 
     [Theory]
@@ -52,22 +54,23 @@ public class MovementGateTests
     [Fact]
     public void IsMoving_Speed_IgnoresBossModArriveCrawl()
     {
-        // BossMod stops pathing within ~0.1y; crawl under the BossMod speed floor must not block hardcasts.
-        var crawlSpeed = 0.8f; // y/s — well below BossModSpeedThreshold (2.25)
+        // BossMod stops pathing within ~0.1y; crawl under the speed floor must not block hardcasts.
+        var crawlSpeed = 0.8f; // y/s — below DefaultSpeedThreshold (1.25)
         Assert.False(MovementGate.IsMoving(
             crawlSpeed,
-            MovementGate.BossModSpeedThreshold,
+            MovementGate.DefaultSpeedThreshold,
             secondsSinceLastMovement: 1.0,
             movementToleranceSeconds: 0.25f));
     }
 
     [Fact]
-    public void IsMoving_Speed_DetectsRealStrafe()
+    public void IsMoving_Speed_DetectsSlowStrafe()
     {
-        var strafeSpeed = 5.0f; // walk/run
+        // Walk/strafe with BossMod loaded used to sit under a 2.25 floor and look "stationary".
+        var slowStrafe = 1.8f;
         Assert.True(MovementGate.IsMoving(
-            strafeSpeed,
-            MovementGate.DefaultSpeedThreshold,
+            slowStrafe,
+            MovementGate.SpeedThresholdFor(bossModLoaded: true),
             secondsSinceLastMovement: 1.0,
             movementToleranceSeconds: 0.25f));
     }

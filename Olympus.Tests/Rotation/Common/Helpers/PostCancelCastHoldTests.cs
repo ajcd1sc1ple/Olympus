@@ -122,10 +122,11 @@ public class PostCancelCastHoldTests
     [Theory]
     [InlineData(true, false, false, true)]
     [InlineData(true, true, false, false)]   // Orbwalker lock wins
-    [InlineData(true, false, true, false)]   // Wrath-style: active for job wins without lock
+    [InlineData(true, false, true, true)]    // Active-for-job alone does not clear the hold
+    [InlineData(true, true, true, false)]    // Lock still wins when also active
     [InlineData(false, false, false, false)]
     [InlineData(false, true, true, false)]
-    public void ShouldBlockHardcasts_YieldsToOrbwalkerCoverage(
+    public void ShouldBlockHardcasts_YieldsToOrbwalkerLock(
         bool holdActive,
         bool orbwalkerLocked,
         bool orbwalkerActiveForJob,

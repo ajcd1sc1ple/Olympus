@@ -256,13 +256,12 @@ public sealed unsafe class ActionService : IActionService
         // Pre-checking defeats the server-side action queue, so we delegate the "can fire now?" decision to UseAction.
         var result = actionManager->UseAction(ActionType.Action, action.ActionId, targetId);
 
-        // Latch on every attempt — Orbwalker Buffer returns false while holding DelayedAction,
-        // and without a latch we would call UseAction every frame (cancel → recast hang).
-        _gcdSubmittedThisCycle = true;
-        _lastGcdSubmitTicks = DateTime.UtcNow.Ticks;
-
         if (result)
         {
+            // Successful submit (including queue-window) — latch so cancel cannot per-frame spam.
+            _gcdSubmittedThisCycle = true;
+            _lastGcdSubmitTicks = DateTime.UtcNow.Ticks;
+
             _lastExecutedAction = action;
             _lastExecuteTime = DateTime.UtcNow;
             Interlocked.Exchange(ref _lastUseActionTicks, _lastExecuteTime.Ticks);
@@ -272,6 +271,13 @@ public sealed unsafe class ActionService : IActionService
             _actionTracker.LogGcdCast(gcdDuration);
             _actionTracker.LogAttempt(action.ActionId, null, null, ActionResult.Success, 0);
             RaiseActionExecuted(action);
+        }
+        else if (!action.IsInstantCast)
+        {
+            // Orbwalker Buffer returns false while holding DelayedAction. Latch cast-time
+            // failures only — instant fillers must still be able to dispatch next.
+            _gcdSubmittedThisCycle = true;
+            _lastGcdSubmitTicks = DateTime.UtcNow.Ticks;
         }
 
         return result;
@@ -414,12 +420,11 @@ public sealed unsafe class ActionService : IActionService
 
         var result = actionManager->UseAction(ActionType.Action, rawDispatchId, targetId);
 
-        // Latch on every attempt (see ExecuteGcd) — Buffer false must not reopen spam.
-        _gcdSubmittedThisCycle = true;
-        _lastGcdSubmitTicks = DateTime.UtcNow.Ticks;
-
         if (result)
         {
+            _gcdSubmittedThisCycle = true;
+            _lastGcdSubmitTicks = DateTime.UtcNow.Ticks;
+
             _lastExecutedAction = action;
             _lastExecuteTime = DateTime.UtcNow;
             Interlocked.Exchange(ref _lastUseActionTicks, _lastExecuteTime.Ticks);
@@ -428,6 +433,11 @@ public sealed unsafe class ActionService : IActionService
             _actionTracker.LogGcdCast(gcdDuration);
             _actionTracker.LogAttempt(action.ActionId, null, null, ActionResult.Success, 0);
             RaiseActionExecuted(action);
+        }
+        else if (!action.IsInstantCast)
+        {
+            _gcdSubmittedThisCycle = true;
+            _lastGcdSubmitTicks = DateTime.UtcNow.Ticks;
         }
 
         return result;

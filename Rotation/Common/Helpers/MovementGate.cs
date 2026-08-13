@@ -19,16 +19,18 @@ public static class MovementGate
     public const float BossModThresholdSquared = 0.09f;
 
     /// <summary>
-    /// Horizontal speed (yalms/sec) above which the player counts as moving for hardcasts.
-    /// Below walk speed so real strafes still gate, above BossMod arrive crawl.
+    /// Horizontal speed (yalms/sec) above which the player counts as moving for GCD selection.
+    /// Below walk speed so real strafes still gate, above BossMod arrive crawl (~0.1–0.8 y/s).
+    /// Kept as a single floor even with BossMod loaded — a higher floor (e.g. 2.25) missed
+    /// slow WASD strafes and starved fillers during boss fights.
     /// </summary>
     public const float DefaultSpeedThreshold = 1.25f;
 
     /// <summary>
-    /// Higher speed floor when BossMod is loaded so max-melee / follow micro-pathing
-    /// does not keep hardcasts blocked between real dodges.
+    /// Deprecated alias — same as <see cref="DefaultSpeedThreshold"/>. Retained so older
+    /// tests/callers compile; do not raise this above walk-strafe speeds.
     /// </summary>
-    public const float BossModSpeedThreshold = 2.25f;
+    public const float BossModSpeedThreshold = DefaultSpeedThreshold;
 
     /// <summary>EMA blend for smoothed speed (higher = snappier).</summary>
     public const float SpeedSmoothing = 0.35f;
@@ -37,7 +39,7 @@ public static class MovementGate
         bossModLoaded ? BossModThresholdSquared : DefaultThresholdSquared;
 
     public static float SpeedThresholdFor(bool bossModLoaded) =>
-        bossModLoaded ? BossModSpeedThreshold : DefaultSpeedThreshold;
+        DefaultSpeedThreshold;
 
     /// <summary>Horizontal (XZ) distance squared — ignores vertical bob / knockup recovery.</summary>
     public static float HorizontalDistanceSquared(Vector3 current, Vector3 previous)

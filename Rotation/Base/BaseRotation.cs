@@ -263,9 +263,9 @@ public abstract class BaseRotation<TContext, TModule> : IRotation, IDisposable, 
         // Update MP forecast service with current state
         UpdateMpForecast(player);
 
-        // Movement detection (horizontal speed / grace). With Orbwalker integration active
-        // for this job, hardcasts are allowed while moving (WrathCombo CanOrbwalk) — Orbwalker
-        // locks/buffers the cast. Without Orbwalker, mid-slide UseAction is blocked.
+        // Movement detection (horizontal speed / grace). Module IsMoving must stay true while
+        // physically pathing so instant fillers keep casting. Orbwalker only clears that flag
+        // once MovementLocked (cast/buffer/force-stop) — not merely because the job is enabled.
         var (isMoving, _) = UpdateMovement(player);
         var orbwalkerActive = OrbwalkerIpc?.IsActiveForJob(player.ClassJob.RowId) == true;
         var orbwalkerLocked = OrbwalkerIpc?.MovementLocked() == true;
@@ -295,8 +295,7 @@ public abstract class BaseRotation<TContext, TModule> : IRotation, IDisposable, 
 
             if (PostCancelCastHold.ShouldBlockHardcasts(
                     PostCancelCastHold.ShouldBlock(FrameTimestamp, _hardcastHoldUntil),
-                    orbwalkerLocked,
-                    orbwalkerActive && Configuration.EnableOrbwalkerIntegration))
+                    orbwalkerLocked))
                 movementBlocksHardcasts = true;
         }
 
