@@ -162,6 +162,7 @@ public static class LocalizedStrings
         public const string OrbwalkerStatusJobOff = "config.general.orbwalker_status_job_off";
         public const string OrbwalkerStatusActive = "config.general.orbwalker_status_active";
         public const string OrbwalkerStatusActiveNoForceStop = "config.general.orbwalker_status_active_no_force_stop";
+        public const string OrbwalkerStatusActiveNoBuffer = "config.general.orbwalker_status_active_no_buffer";
         public const string EnablePostCancelHardcastHold = "config.general.enable_post_cancel_hardcast_hold";
         public const string EnablePostCancelHardcastHoldDesc = "config.general.enable_post_cancel_hardcast_hold_desc";
     }

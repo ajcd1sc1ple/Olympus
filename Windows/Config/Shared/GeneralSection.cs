@@ -258,12 +258,12 @@ public sealed class GeneralSection
             () => this.config.EnableOrbwalkerIntegration,
             v => this.config.EnableOrbwalkerIntegration = v,
             Loc.T(LocalizedStrings.General.EnableOrbwalkerIntegrationDesc,
-                "When Orbwalker is installed and enabled for your job, Olympus will hardcast while you hold move keys — Orbwalker locks movement so casts are not cancelled."),
+                "When Orbwalker is installed and enabled for your job, hardcasts are allowed while moving — Orbwalker locks movement (same model as WrathCombo Auto-Rotation)."),
             this.save);
 
         ImGui.TextDisabled(GetOrbwalkerStatusText());
         ImGui.TextDisabled(Loc.T(LocalizedStrings.General.OrbwalkerHelp,
-            "Install from puni.sh/plugin/Orbwalker. Enable the plugin and your job in /orbwalker. Turn on combat force-stop / slidecast mode so Orbwalker locks you before each hardcast."));
+            "Install from puni.sh/plugin/Orbwalker. Enable the plugin and your job in /orbwalker. Enable Buffer Initial Cast and combat force-stop / slidecast for best results."));
     }
 
     private string GetOrbwalkerStatusText()
@@ -280,6 +280,12 @@ public sealed class GeneralSection
         var jobId = this.objectTable?.LocalPlayer?.ClassJob.RowId ?? 0;
         if (jobId != 0 && this.orbwalkerIpc.IsActiveForJob(jobId))
         {
+            if (!this.orbwalkerIpc.BufferEnabled())
+            {
+                return Loc.T(LocalizedStrings.General.OrbwalkerStatusActiveNoBuffer,
+                    "Status: Active for current job (enable Buffer Initial Cast in Orbwalker)");
+            }
+
             return this.orbwalkerIpc.OrbwalkingMode()
                 ? Loc.T(LocalizedStrings.General.OrbwalkerStatusActive, "Status: Active for current job")
                 : Loc.T(LocalizedStrings.General.OrbwalkerStatusActiveNoForceStop,

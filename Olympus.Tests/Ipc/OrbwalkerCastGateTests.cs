@@ -12,9 +12,10 @@ public class OrbwalkerCastGateTests
     // Moving, no Orbwalker coverage: block
     [InlineData(true, false, false, false, true)]
     [InlineData(true, true, false, false, true)]
-    [InlineData(true, true, true, false, true)] // active but not locked yet — still block
     [InlineData(true, false, true, true, true)] // integration off — still block
-    // Moving + Orbwalker actively locking: allow hardcast
+    // Moving + Orbwalker active for job (WrathCombo CanOrbwalk): allow hardcast
+    // without waiting for MovementLocked — Orbwalker locks/buffers the cast.
+    [InlineData(true, true, true, false, false)]
     [InlineData(true, true, true, true, false)]
     public void ShouldBlockHardcasts_MatchesExpected(
         bool isMoving,

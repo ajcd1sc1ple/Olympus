@@ -2,8 +2,10 @@ namespace Olympus.Ipc;
 
 /// <summary>
 /// Pure helper deciding whether movement should suppress cast-time GCDs.
-/// Hardcasts are only allowed while "moving" when Orbwalker has already locked movement —
-/// otherwise Olympus starts a cast mid-slide and the game cancels it (recast stutter).
+/// Mirrors WrathCombo Auto-Rotation: when Orbwalker integration is active for the job,
+/// hardcasts are allowed while moving — Orbwalker locks (and optionally buffers) the cast.
+/// Waiting for <c>MovementLocked</c> first races Orbwalker's lock window and causes
+/// cancel → recast spam every frame.
 /// </summary>
 public static class OrbwalkerCastGate
 {
@@ -15,17 +17,17 @@ public static class OrbwalkerCastGate
         bool isMoving,
         bool integrationEnabled,
         bool orbwalkerActiveForJob,
-        bool orbwalkerMovementLocked)
+        bool orbwalkerMovementLocked = false)
     {
         if (!isMoving)
             return false;
 
-        // Only trust Orbwalker once it is actively holding the character still.
-        // Allowing hardcasts merely because Orbwalker is installed races its lock window
-        // (Olympus queues earlier than Orbwalker's ~0.1s GCD cutoff) and causes cancel loops.
-        if (integrationEnabled && orbwalkerActiveForJob && orbwalkerMovementLocked)
+        // WrathCombo: orbwalking = OrbwalkerIntegration && CanOrbwalk.
+        // MovementLocked is optional — Orbwalker locks once the cast/queue starts (or via Buffer).
+        if (integrationEnabled && orbwalkerActiveForJob)
             return false;
 
+        _ = orbwalkerMovementLocked; // retained for call-site compatibility / diagnostics
         return true;
     }
 }

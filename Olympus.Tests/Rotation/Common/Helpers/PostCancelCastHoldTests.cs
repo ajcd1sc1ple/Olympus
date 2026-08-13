@@ -120,12 +120,18 @@ public class PostCancelCastHoldTests
     }
 
     [Theory]
-    [InlineData(true, false, true)]
-    [InlineData(true, true, false)]  // Orbwalker lock wins
-    [InlineData(false, false, false)]
-    [InlineData(false, true, false)]
-    public void ShouldBlockHardcasts_YieldsToOrbwalkerLock(bool holdActive, bool orbwalkerLocked, bool expected)
+    [InlineData(true, false, false, true)]
+    [InlineData(true, true, false, false)]   // Orbwalker lock wins
+    [InlineData(true, false, true, false)]   // Wrath-style: active for job wins without lock
+    [InlineData(false, false, false, false)]
+    [InlineData(false, true, true, false)]
+    public void ShouldBlockHardcasts_YieldsToOrbwalkerCoverage(
+        bool holdActive,
+        bool orbwalkerLocked,
+        bool orbwalkerActiveForJob,
+        bool expected)
     {
-        Assert.Equal(expected, PostCancelCastHold.ShouldBlockHardcasts(holdActive, orbwalkerLocked));
+        Assert.Equal(expected, PostCancelCastHold.ShouldBlockHardcasts(
+            holdActive, orbwalkerLocked, orbwalkerActiveForJob));
     }
 }

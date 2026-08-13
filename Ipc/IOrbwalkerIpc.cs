@@ -30,6 +30,12 @@ public interface IOrbwalkerIpc
     bool OrbwalkingMode();
 
     /// <summary>
+    /// True when Orbwalker's Buffer Initial Cast is enabled.
+    /// Buffer intercepts moving hardcasts (returns false from UseAction) until the player is still.
+    /// </summary>
+    bool BufferEnabled();
+
+    /// <summary>
     /// Job IDs for which Orbwalker is enabled.
     /// </summary>
     IReadOnlyList<uint> EnabledJobs();

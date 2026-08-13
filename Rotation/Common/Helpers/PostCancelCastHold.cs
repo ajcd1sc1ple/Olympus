@@ -60,12 +60,16 @@ public static class PostCancelCastHold
     public static bool ShouldBlock(DateTime now, DateTime holdUntil) => now < holdUntil;
 
     /// <summary>
-    /// Combines the post-cancel hold with Orbwalker lock state.
-    /// An active Orbwalker movement lock must win — otherwise the hold blocks the next
-    /// hardcast, Orbwalker never re-locks, and BossMod pathing deadlocks casting.
+    /// Combines the post-cancel hold with Orbwalker coverage.
+    /// When Orbwalker is active for the job (WrathCombo CanOrbwalk) — or already movement-locked —
+    /// the hold must not win: otherwise hardcasts stay suppressed, Orbwalker never re-locks,
+    /// and BossMod pathing deadlocks casting. ActionService submit cooldown still anti-spams.
     /// </summary>
-    public static bool ShouldBlockHardcasts(bool holdActive, bool orbwalkerMovementLocked) =>
-        holdActive && !orbwalkerMovementLocked;
+    public static bool ShouldBlockHardcasts(
+        bool holdActive,
+        bool orbwalkerMovementLocked,
+        bool orbwalkerActiveForJob = false) =>
+        holdActive && !orbwalkerMovementLocked && !orbwalkerActiveForJob;
 
     public static float ClampHoldSeconds(float seconds) =>
         Math.Clamp(seconds, MinHoldSeconds, MaxHoldSeconds);

@@ -17,6 +17,7 @@ public sealed class OrbwalkerIpc : IOrbwalkerIpc, IDisposable
     private readonly ICallGateSubscriber<bool>? _pluginEnabled;
     private readonly ICallGateSubscriber<bool>? _movementLocked;
     private readonly ICallGateSubscriber<bool>? _orbwalkingMode;
+    private readonly ICallGateSubscriber<bool>? _bufferEnabled;
     private readonly ICallGateSubscriber<List<uint>>? _enabledJobs;
     private bool _loggedUnavailable;
 
@@ -29,6 +30,7 @@ public sealed class OrbwalkerIpc : IOrbwalkerIpc, IDisposable
             _pluginEnabled = pluginInterface.GetIpcSubscriber<bool>("Orbwalker.PluginEnabled");
             _movementLocked = pluginInterface.GetIpcSubscriber<bool>("Orbwalker.MovementLocked");
             _orbwalkingMode = pluginInterface.GetIpcSubscriber<bool>("Orbwalker.OrbwalkingMode");
+            _bufferEnabled = pluginInterface.GetIpcSubscriber<bool>("Orbwalker.BufferEnabled");
             _enabledJobs = pluginInterface.GetIpcSubscriber<List<uint>>("Orbwalker.EnabledJobs");
         }
         catch (Exception ex)
@@ -72,6 +74,8 @@ public sealed class OrbwalkerIpc : IOrbwalkerIpc, IDisposable
     public bool MovementLocked() => TryInvoke(_movementLocked, false);
 
     public bool OrbwalkingMode() => TryInvoke(_orbwalkingMode, false);
+
+    public bool BufferEnabled() => TryInvoke(_bufferEnabled, false);
 
     public IReadOnlyList<uint> EnabledJobs()
     {
