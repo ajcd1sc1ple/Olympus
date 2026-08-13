@@ -29,6 +29,12 @@ public abstract class BaseHealerRotation<TContext, TModule> : BaseRotation<TCont
     where TContext : IHealerRotationContext
     where TModule : IRotationModule<TContext>
 {
+    /// <summary>
+    /// Healers must dispatch oGCD heals (Kerachole, Tetragrammaton, etc.) out of combat
+    /// when the heal toggle is on — e.g. topping off after a wipe or between pulls.
+    /// </summary>
+    protected override bool AllowPreCombatOgcdDispatch => true;
+
     #region Healer-Specific Services
 
     protected readonly HealingSpellSelector HealingSpellSelector;

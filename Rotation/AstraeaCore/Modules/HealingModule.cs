@@ -50,7 +50,7 @@ public sealed class HealingModule : IAstraeaModule
     {
         context.HealingCoordination.Clear();
         TryPrePullEarthlyStar(context, scheduler);   // NEW — bypasses HP threshold
-        if (!context.InCombat) return;
+        // Heal regardless of combat/target — only the heal master toggle stops healing.
         if (!context.Configuration.EnableHealing) return;
 
         foreach (var handler in _handlers)

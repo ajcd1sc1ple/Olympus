@@ -283,11 +283,20 @@ public class AsclepiusTests
     }
 
     [Fact]
-    public void HealingModule_CollectCandidates_NotInCombat_PushesNothing()
+    public void HealingModule_CollectCandidates_OutOfCombat_StillHealsWhenInjured()
     {
+        // Healing must run with no combat / no enemy target; only EnableHealing stops it.
         var module = new HealingModule();
+        var config = AsclepiusTestContext.CreateDefaultSageConfiguration();
+        config.Healing.UseDamageIntakeTriage = false;
+
+        var injured = MockBuilders.CreateMockBattleChara(
+            entityId: 2u, currentHp: 10000, maxHp: 50000).Object; // 20% < DiagnosisThreshold
+        var partyHelper = MockBuilders.CreateMockPartyHelper(lowestHpMember: injured);
         var actionService = MockBuilders.CreateMockActionService(canExecuteGcd: true);
         var context = AsclepiusTestContext.Create(
+            config: config,
+            partyHelper: partyHelper,
             actionService: actionService,
             inCombat: false,
             canExecuteGcd: true);
@@ -295,8 +304,9 @@ public class AsclepiusTests
         var scheduler = SchedulerFactory.CreateForTest(actionService);
         module.CollectCandidates(context, scheduler, isMoving: false);
 
-        Assert.Empty(scheduler.InspectGcdQueue());
-        Assert.Empty(scheduler.InspectOgcdQueue());
+        Assert.Contains(
+            scheduler.InspectGcdQueue(),
+            c => c.Behavior.Action.ActionId == SGEActions.Diagnosis.ActionId);
     }
 
     [Fact]

@@ -41,8 +41,9 @@ public sealed class HealingModule : IApolloModule
     public void CollectCandidates(IApolloContext context, RotationScheduler scheduler, bool isMoving)
     {
         context.HealingCoordination.Clear();
-        TryPrePullRegen(context, scheduler);    // NEW — runs before the InCombat gate
-        if (!context.InCombat) return;
+        TryPrePullRegen(context, scheduler);    // NEW — runs before the EnableHealing gate
+        // Heal regardless of combat/target — only the heal master toggle stops healing.
+        if (!context.Configuration.EnableHealing) return;
 
         foreach (var handler in _handlers)
             handler.CollectCandidates(context, scheduler, isMoving);
