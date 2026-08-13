@@ -7,8 +7,8 @@ using Dalamud.Plugin.Services;
 namespace Olympus.Ipc;
 
 /// <summary>
-/// Dalamud IPC subscriber for BossMod / BossMod Reborn Timeline channels only.
-/// Raidwide and tankbuster use <c>BossMod.Timeline.*</c> — not Hints.
+/// Dalamud IPC subscriber for BossMod / BossMod Reborn timeline + cast-hint channels.
+/// Merge prefers cast-hint when present, otherwise Timeline — one answer per mechanic.
 /// </summary>
 public sealed class BossModTimelineIpc : IBossModTimelineIpc, IDisposable
 {
@@ -23,6 +23,8 @@ public sealed class BossModTimelineIpc : IBossModTimelineIpc, IDisposable
     private readonly ICallGateSubscriber<string?>? _activeModuleName;
     private readonly ICallGateSubscriber<float>? _nextRaidwideIn;
     private readonly ICallGateSubscriber<float>? _nextTankbusterIn;
+    private readonly ICallGateSubscriber<float>? _nextRaidwideDamageIn;
+    private readonly ICallGateSubscriber<float>? _nextTankbusterDamageIn;
     private readonly ICallGateSubscriber<float>? _nextDowntimeIn;
     private bool _loggedUnavailable;
 
@@ -36,6 +38,8 @@ public sealed class BossModTimelineIpc : IBossModTimelineIpc, IDisposable
             _activeModuleName = pluginInterface.GetIpcSubscriber<string?>("BossMod.ActiveModuleName");
             _nextRaidwideIn = pluginInterface.GetIpcSubscriber<float>("BossMod.Timeline.NextRaidwideIn");
             _nextTankbusterIn = pluginInterface.GetIpcSubscriber<float>("BossMod.Timeline.NextTankbusterIn");
+            _nextRaidwideDamageIn = pluginInterface.GetIpcSubscriber<float>("BossMod.Hints.NextRaidwideDamageIn");
+            _nextTankbusterDamageIn = pluginInterface.GetIpcSubscriber<float>("BossMod.Hints.NextTankbusterDamageIn");
             _nextDowntimeIn = pluginInterface.GetIpcSubscriber<float>("BossMod.Timeline.NextDowntimeIn");
         }
         catch (Exception ex)
@@ -81,6 +85,10 @@ public sealed class BossModTimelineIpc : IBossModTimelineIpc, IDisposable
     public float? NextRaidwideIn() => Normalize(TryInvoke(_nextRaidwideIn, NoneSentinel));
 
     public float? NextTankbusterIn() => Normalize(TryInvoke(_nextTankbusterIn, NoneSentinel));
+
+    public float? NextRaidwideDamageIn() => Normalize(TryInvoke(_nextRaidwideDamageIn, NoneSentinel));
+
+    public float? NextTankbusterDamageIn() => Normalize(TryInvoke(_nextTankbusterDamageIn, NoneSentinel));
 
     public float? NextDowntimeIn() => Normalize(TryInvoke(_nextDowntimeIn, NoneSentinel));
 

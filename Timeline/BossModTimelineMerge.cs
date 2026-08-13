@@ -3,9 +3,9 @@ using Olympus.Timeline.Models;
 namespace Olympus.Timeline;
 
 /// <summary>
-/// Pure merge helpers for combining BossMod Timeline IPC with embedded Cactbot timelines.
-/// One BossMod channel per mechanic type — no Hints dual-source merge.
-/// When BossMod has a prediction it wins; Cactbot is fallback only.
+/// Pure merge helpers for combining BossMod IPC with embedded Cactbot timelines.
+/// Resolves one BossMod value per mechanic (cast-hint preferred, else Timeline),
+/// then uses Cactbot only when BossMod has no prediction.
 /// </summary>
 public static class BossModTimelineMerge
 {
@@ -33,20 +33,30 @@ public static class BossModTimelineMerge
     }
 
     /// <summary>
-    /// Uses BossMod Timeline.NextRaidwideIn when present; otherwise Cactbot.
+    /// One BossMod answer: prefer cast-hint (actual damage timing) when present,
+    /// otherwise Timeline state-machine. Cactbot is fallback only.
     /// </summary>
-    public static MechanicPrediction? MergeRaidwide(float? bossModTimelineSeconds, MechanicPrediction? cactbot)
+    public static MechanicPrediction? MergeRaidwide(
+        float? timelineSeconds,
+        float? hintSeconds,
+        MechanicPrediction? cactbot)
     {
-        return FromSeconds(bossModTimelineSeconds, TimelineEntryType.Raidwide, "BossMod raidwide")
-               ?? cactbot;
+        var bossMod = FromSeconds(hintSeconds, TimelineEntryType.Raidwide, "BossMod raidwide")
+                      ?? FromSeconds(timelineSeconds, TimelineEntryType.Raidwide, "BossMod raidwide");
+        return bossMod ?? cactbot;
     }
 
     /// <summary>
-    /// Uses BossMod Timeline.NextTankbusterIn when present; otherwise Cactbot.
+    /// One BossMod answer: prefer cast-hint when present, otherwise Timeline.
+    /// Cactbot is fallback only.
     /// </summary>
-    public static MechanicPrediction? MergeTankBuster(float? bossModTimelineSeconds, MechanicPrediction? cactbot)
+    public static MechanicPrediction? MergeTankBuster(
+        float? timelineSeconds,
+        float? hintSeconds,
+        MechanicPrediction? cactbot)
     {
-        return FromSeconds(bossModTimelineSeconds, TimelineEntryType.TankBuster, "BossMod tankbuster")
-               ?? cactbot;
+        var bossMod = FromSeconds(hintSeconds, TimelineEntryType.TankBuster, "BossMod tankbuster")
+                      ?? FromSeconds(timelineSeconds, TimelineEntryType.TankBuster, "BossMod tankbuster");
+        return bossMod ?? cactbot;
     }
 }

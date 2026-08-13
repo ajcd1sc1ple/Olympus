@@ -94,6 +94,28 @@ public sealed class AstraeaStatusHelper : BaseStatusHelper
     }
 
     /// <summary>
+    /// Checks if the target has Aspected Helios regen (party AoE shield/regen prep).
+    /// </summary>
+    public bool HasAspectedHelios(IGameObject target)
+    {
+        if (target is not IBattleChara battleChara)
+            return false;
+
+        return HasStatus(battleChara, ASTActions.AspectedHeliosStatusId);
+    }
+
+    /// <summary>
+    /// Checks if the target has Helios Conjunction regen.
+    /// </summary>
+    public bool HasHeliosConjunction(IGameObject target)
+    {
+        if (target is not IBattleChara battleChara)
+            return false;
+
+        return HasStatus(battleChara, ASTActions.HeliosConjunctionStatusId);
+    }
+
+    /// <summary>
     /// Gets the remaining duration of Aspected Benefic on a target.
     /// </summary>
     public float GetAspectedBeneficDuration(IGameObject target)

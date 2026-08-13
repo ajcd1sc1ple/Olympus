@@ -16,9 +16,8 @@ public sealed class TimelineConfig
     public bool EnableTimelinePredictions { get; set; } = true;
 
     /// <summary>
-    /// When true, use BossMod / BossMod Reborn <c>BossMod.Timeline.*</c> IPC for raidwide
-    /// and tankbuster when an encounter module is active. Cactbot embedded timelines are
-    /// fallback only when BossMod has no prediction. Does not use BossMod Hints channels.
+    /// When true, use BossMod Reborn for raidwide/tankbuster: cast-hint when a cast is
+    /// predicted, otherwise Timeline. Cactbot embedded timelines are fallback only.
     /// Default on.
     /// </summary>
     public bool EnableBossModTimelineIntegration { get; set; } = true;

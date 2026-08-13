@@ -487,8 +487,15 @@ public sealed class TimelineService : ITimelineService, IDisposable
 
         if (IsBossModTimelineEnabled() && bossModTimeline is { } ipc && ipc.Available && ipc.HasActiveModule())
         {
-            cachedNextRaidwide = BossModTimelineMerge.MergeRaidwide(ipc.NextRaidwideIn(), cactbotRw);
-            cachedNextTankBuster = BossModTimelineMerge.MergeTankBuster(ipc.NextTankbusterIn(), cactbotTb);
+            // Cast-hint preferred when present (real cast timing); else Timeline; else Cactbot.
+            cachedNextRaidwide = BossModTimelineMerge.MergeRaidwide(
+                ipc.NextRaidwideIn(),
+                ipc.NextRaidwideDamageIn(),
+                cactbotRw);
+            cachedNextTankBuster = BossModTimelineMerge.MergeTankBuster(
+                ipc.NextTankbusterIn(),
+                ipc.NextTankbusterDamageIn(),
+                cactbotTb);
             return;
         }
 

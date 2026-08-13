@@ -203,8 +203,6 @@ public sealed unsafe class AutoAttackService : IAutoAttackService
             if (uiState != null)
             {
                 // Prefer Set — validates and updates the global auto-attack state.
-                // Some plugins hook Set and may report success without changing state
-                // (e.g. BossMod preventing early autos); verify before treating as done.
                 uiState->WeaponState.AutoAttackState.Set(enable);
                 if (IsAutoAttacking() == enable)
                 {
@@ -213,10 +211,16 @@ public sealed unsafe class AutoAttackService : IAutoAttackService
                 }
             }
 
-            // Fallback: General Action 1 is the Auto-Attack toggle (BossMod uses this path).
-            var am = ActionManager.Instance();
-            if (am != null && am->UseAction(ActionType.GeneralAction, AutoAttackGeneralActionId))
-                _lastToggleUtc = now;
+            // General Action 1 is a TOGGLE. Never use it to enable — if IsAutoAttacking()
+            // false-negatives while AA is actually on, the toggle would turn AA off and
+            // stall the rotation until something else re-engages.
+            // Only toggle as a last resort to disable when Set failed and AA still reads on.
+            if (!enable && IsAutoAttacking())
+            {
+                var am = ActionManager.Instance();
+                if (am != null && am->UseAction(ActionType.GeneralAction, AutoAttackGeneralActionId))
+                    _lastToggleUtc = now;
+            }
         }
         catch (Exception ex)
         {

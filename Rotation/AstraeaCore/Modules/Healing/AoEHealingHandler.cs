@@ -39,6 +39,12 @@ public sealed class AoEHealingHandler : IHealingHandler
         var raidwideImminent = TimelineHelper.IsRaidwideImminent(
             context.TimelineService, context.BossMechanicDetector, context.Configuration, out _);
 
+        // Sticky BossMod raidwide predictions must not re-cast Helios every GCD and starve Combust/Malefic.
+        if (raidwideImminent
+            && (context.StatusHelper.HasAspectedHelios(player)
+                || context.StatusHelper.HasHeliosConjunction(player)))
+            raidwideImminent = false;
+
         var shouldUse = (avgHp <= config.AoEHealThreshold && count >= config.AoEHealMinTargets) || raidwideImminent;
         if (!shouldUse) return;
 

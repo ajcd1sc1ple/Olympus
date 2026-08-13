@@ -38,22 +38,23 @@ public sealed class SingleTargetHealHandler : IHealingHandler
         if (tankBusterImminent && config.EnableAdloquium)
         {
             // Max shield dump on the tank before the buster — ignore HP thresholds.
+            // Only push when Galvanize is missing; otherwise fall through so DPS can run.
             var tank = TimelineHelper.ResolveTankBusterTarget(
                 context.PartyHelper.FindTankInParty(player),
                 context.PartyHelper.GetAllPartyMembers(player),
                 player.EntityId);
-            if (tank == null) return;
-            if (context.HealingCoordination.IsTargetReserved(tank.EntityId, context.PartyCoordinationService))
-                return;
-            if (context.StatusHelper.HasGalvanize(tank)) return;
-            if (config.AvoidOverwritingSageShields && HasSageShield(context, tank)) return;
-
-            var tbHp = context.PartyHelper.GetHpPercent(tank);
-            if (!TrySelectAdlo(context, config, player, tank, out var tbAction, out var tbBehavior))
-                return;
-
-            PushHeal(context, scheduler, config, tbAction, tbBehavior, tank, tbHp, tankBusterImminent: true, Priority);
-            return;
+            if (tank != null
+                && !context.HealingCoordination.IsTargetReserved(tank.EntityId, context.PartyCoordinationService)
+                && !context.StatusHelper.HasGalvanize(tank)
+                && !(config.AvoidOverwritingSageShields && HasSageShield(context, tank)))
+            {
+                var tbHp = context.PartyHelper.GetHpPercent(tank);
+                if (TrySelectAdlo(context, config, player, tank, out var tbAction, out var tbBehavior))
+                {
+                    PushHeal(context, scheduler, config, tbAction, tbBehavior, tank, tbHp, tankBusterImminent: true, Priority);
+                    return;
+                }
+            }
         }
 
         var target = context.Configuration.Healing.UseDamageIntakeTriage

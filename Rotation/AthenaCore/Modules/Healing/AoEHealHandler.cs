@@ -37,6 +37,11 @@ public sealed class AoEHealHandler : IHealingHandler
         var raidwideImminent = TimelineHelper.IsRaidwideImminent(
             context.TimelineService, context.BossMechanicDetector, context.Configuration, out _);
 
+        // If Succor shields are already up, do not keep re-casting on a sticky timeline
+        // prediction — that starves Broil/DoT until the prediction clears.
+        if (raidwideImminent && context.StatusHelper.HasGalvanize(player))
+            raidwideImminent = false;
+
         var shouldUse = (avgHp <= config.AoEHealThreshold && count >= config.AoEHealMinTargets) || raidwideImminent;
         if (!shouldUse) return;
 
