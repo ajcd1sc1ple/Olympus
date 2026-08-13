@@ -127,12 +127,16 @@ public abstract class BaseRotation<TContext, TModule> : IRotation, IDisposable, 
     private string? _errorKeyNullRef;
     private string? _errorKeyGeneral;
 
-    // Movement detection
+    // Movement detection (horizontal speed + grace). Speed ignores BossMod arrive crawl.
     private Vector3 _lastPosition;
     private DateTime _lastMovementTime = DateTime.MinValue;
+    private float _smoothedHorizontalSpeed;
+    private bool _hasMovementSample;
 
     // Post-cancel hardcast hold (prevents spam-retry after a move-cancelled cast)
     private bool _wasCastingCastTimeGcd;
+    private float _previousCurrentCastTime;
+    private float _previousTotalCastTime;
     private DateTime _hardcastHoldUntil = DateTime.MinValue;
 
     // Cached timestamp for current frame — set once at start of ExecuteInternal
@@ -259,7 +263,7 @@ public abstract class BaseRotation<TContext, TModule> : IRotation, IDisposable, 
         // Update MP forecast service with current state
         UpdateMpForecast(player);
 
-        // Movement detection (raw position / grace). Hardcasts while "moving" only if Orbwalker
+        // Movement detection (horizontal speed / grace). Hardcasts while "moving" only if Orbwalker
         // has already locked input — otherwise mid-slide UseAction gets cancelled immediately.
         var (isMoving, _) = UpdateMovement(player);
         var orbwalkerActive = OrbwalkerIpc?.IsActiveForJob(player.ClassJob.RowId) == true;
@@ -271,22 +275,42 @@ public abstract class BaseRotation<TContext, TModule> : IRotation, IDisposable, 
             orbwalkerLocked);
 
         // After a move-cancelled cast-time GCD, keep suppressing hardcasts briefly.
+        // Do not override an active Orbwalker lock — that re-creates the cancel/hold deadlock
+        // with BossMod pathing (hold blocks the next hardcast → Orbwalker never re-locks).
         if (Configuration.EnablePostCancelHardcastHold)
         {
             var holdSeconds = PostCancelCastHold.ClampHoldSeconds(Configuration.PostCancelHardcastHoldSeconds);
+            var castWasCancelled = PostCancelCastHold.WasCancelled(
+                _previousCurrentCastTime,
+                _previousTotalCastTime);
             _hardcastHoldUntil = PostCancelCastHold.UpdateHoldUntil(
                 wasCastingCastTimeGcd: _wasCastingCastTimeGcd,
                 isCasting: player.IsCasting,
                 isMoving: isMoving,
+                castWasCancelled: castWasCancelled,
                 now: FrameTimestamp,
                 holdDuration: TimeSpan.FromSeconds(holdSeconds),
                 currentHoldUntil: _hardcastHoldUntil);
 
-            if (PostCancelCastHold.ShouldBlock(FrameTimestamp, _hardcastHoldUntil))
+            if (PostCancelCastHold.ShouldBlockHardcasts(
+                    PostCancelCastHold.ShouldBlock(FrameTimestamp, _hardcastHoldUntil),
+                    orbwalkerLocked))
                 movementBlocksHardcasts = true;
         }
 
+        var wasCastingCastTimeGcd = _wasCastingCastTimeGcd;
         _wasCastingCastTimeGcd = player.IsCasting && player.TotalCastTime > 0f;
+        if (_wasCastingCastTimeGcd)
+        {
+            _previousCurrentCastTime = player.CurrentCastTime;
+            _previousTotalCastTime = player.TotalCastTime;
+        }
+        else if (!wasCastingCastTimeGcd)
+        {
+            // Truly idle (not the falling-edge frame) — drop stale bar samples.
+            _previousCurrentCastTime = 0f;
+            _previousTotalCastTime = 0f;
+        }
 
         // Combat tracking — also treat auto-attack as combat if enabled
         var inCombat = (player.StatusFlags & StatusFlags.InCombat) != 0;
@@ -339,22 +363,46 @@ public abstract class BaseRotation<TContext, TModule> : IRotation, IDisposable, 
     protected abstract void UpdateMpForecast(IPlayerCharacter player);
 
     /// <summary>
-    /// Updates movement detection with configurable grace period.
+    /// Updates movement detection from horizontal speed with configurable grace period.
+    /// BossMod AI micro-pathing below the speed floor does not keep hardcasts blocked.
     /// </summary>
     /// <returns>Tuple of (isMoving, positionChanged)</returns>
     protected (bool isMoving, bool positionChanged) UpdateMovement(IPlayerCharacter player)
     {
         BossModPresence?.Refresh();
-        var thresholdSquared = MovementGate.ThresholdSquaredFor(BossModPresence?.IsLoaded == true);
-        var positionChanged = MovementGate.HasMoved(player.Position, _lastPosition, thresholdSquared);
+        var bossModLoaded = BossModPresence?.IsLoaded == true;
+        var thresholdSquared = MovementGate.ThresholdSquaredFor(bossModLoaded);
+        var speedThreshold = MovementGate.SpeedThresholdFor(bossModLoaded);
+
+        var positionChanged = false;
+        if (!_hasMovementSample)
+        {
+            // First sample: seed position without treating spawn/teleport as a dodge.
+            _hasMovementSample = true;
+            _smoothedHorizontalSpeed = 0f;
+        }
+        else
+        {
+            var sampleSpeed = MovementGate.HorizontalSpeed(player.Position, _lastPosition, FrameDeltaSeconds);
+            _smoothedHorizontalSpeed = MovementGate.SmoothSpeed(_smoothedHorizontalSpeed, sampleSpeed);
+            positionChanged = MovementGate.HasMoved(player.Position, _lastPosition, thresholdSquared)
+                || _smoothedHorizontalSpeed > speedThreshold;
+        }
+
         _lastPosition = player.Position;
 
-        // Track when we last detected actual movement
+        // Track when we last detected meaningful movement (speed or large step).
         if (positionChanged)
             _lastMovementTime = FrameTimestamp;
 
-        var timeSinceMovement = (FrameTimestamp - _lastMovementTime).TotalSeconds;
-        var isMoving = MovementGate.IsMoving(positionChanged, timeSinceMovement, Configuration.MovementTolerance);
+        var timeSinceMovement = _lastMovementTime == DateTime.MinValue
+            ? double.MaxValue
+            : (FrameTimestamp - _lastMovementTime).TotalSeconds;
+        var isMoving = MovementGate.IsMoving(
+            _smoothedHorizontalSpeed,
+            speedThreshold,
+            timeSinceMovement,
+            Configuration.MovementTolerance);
 
         return (isMoving, positionChanged);
     }

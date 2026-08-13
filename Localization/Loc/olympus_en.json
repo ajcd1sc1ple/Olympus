@@ -155,7 +155,7 @@
   "config.targeting.safe_gap_closer": "Safe gap closers",
   "config.targeting.safe_gap_closer_desc": "Only use gap closers on your explicitly selected target, and block them when you are moving away from the target (spread markers, ground AoE at the end point).",
   "config.targeting.movement_tolerance": "Movement Tolerance",
-  "config.targeting.movement_tolerance_desc": "Delay after stopping before casting. Lower = faster, higher = safer.",
+  "config.targeting.movement_tolerance_desc": "Delay after stopping before casting. Lower = faster, higher = safer. BossMod follow crawl is filtered by speed, not just this delay.",
 
   "config.role_actions.header": "Role Actions",
   "config.role_actions.lucid_dreaming": "Lucid Dreaming",
