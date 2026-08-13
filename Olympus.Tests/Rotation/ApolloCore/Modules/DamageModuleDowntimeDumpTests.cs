@@ -160,11 +160,14 @@ public sealed class DamageModuleDowntimeDumpTests : IDisposable
             .Setup(t => t.FindEnemyNeedingDot(It.IsAny<uint>(), It.IsAny<float>(), It.IsAny<float>(), player.Object))
             .Returns<uint, float, float, Dalamud.Game.ClientState.Objects.SubKinds.IPlayerCharacter>((_, _, _, _) => null);
 
+        var partyHelper = MockBuilders.CreateMockPartyHelper();
+
         var ctx = new Mock<IApolloContext>();
         ctx.Setup(x => x.InCombat).Returns(true);
         ctx.Setup(x => x.Configuration).Returns(config);
         ctx.Setup(x => x.Player).Returns(player.Object);
         ctx.Setup(x => x.TargetingService).Returns(targeting.Object);
+        ctx.Setup(x => x.PartyHelper).Returns(partyHelper.Object);
         ctx.Setup(x => x.Debug).Returns(new DebugState());
         ctx.Setup(x => x.LilyCount).Returns(lilyCount);
         ctx.Setup(x => x.BloodLilyCount).Returns(bloodLilyCount);

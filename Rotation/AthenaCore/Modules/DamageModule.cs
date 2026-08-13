@@ -63,10 +63,20 @@ public sealed class DamageModule : BaseDamageModule<IAthenaContext>, IAthenaModu
             return;
         }
 
+        // Offensive oGCDs may still weave during an emergency; GCD damage yields to heals.
         TryPushChainStratagem(context, scheduler);
         TryPushBanefulImpaction(context, scheduler);
         TryPushEnergyDrain(context, scheduler);
         TryPushAetherflow(context, scheduler);
+
+        var (_, lowestHp, _) = context.PartyHelper.CalculatePartyHealthMetrics(context.Player);
+        if (HealingUrgency.ShouldSuppressDamageGcds(
+                context.Configuration.EnableHealing, lowestHp, context.Configuration.Healing))
+        {
+            SetDpsState(context, "Holding: GCD emergency heal");
+            return;
+        }
+
         TryPushDoT(context, scheduler, isMoving);
         TryPushAoEDamage(context, scheduler);
         if (!isMoving) TryPushSingleTargetDamage(context, scheduler, isMoving);

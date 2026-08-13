@@ -139,6 +139,15 @@ public sealed class DamageModule : BaseDamageModule<IApolloContext>, IApolloModu
             return;
         }
 
+        // GcdEmergencyThreshold: stop damage GCDs so a heal can own the GCD.
+        var (_, lowestHp, _) = context.PartyHelper.CalculatePartyHealthMetrics(context.Player);
+        if (HealingUrgency.ShouldSuppressDamageGcds(
+                context.Configuration.EnableHealing, lowestHp, context.Configuration.Healing))
+        {
+            SetDpsState(context, "Holding: GCD emergency heal");
+            return;
+        }
+
         TryPushSpecialDamage(context, scheduler, isMoving);
         TryPushDoT(context, scheduler, isMoving);
         TryPushAoEDamage(context, scheduler);

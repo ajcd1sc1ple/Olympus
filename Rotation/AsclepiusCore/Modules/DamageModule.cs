@@ -67,6 +67,15 @@ public sealed class DamageModule : BaseDamageModule<IAsclepiusContext>, IAsclepi
         }
 
         TryPushPsyche(context, scheduler);
+
+        var (_, lowestHp, _) = context.PartyHelper.CalculatePartyHealthMetrics(context.Player);
+        if (HealingUrgency.ShouldSuppressDamageGcds(
+                context.Configuration.EnableHealing, lowestHp, context.Configuration.Healing))
+        {
+            SetDpsState(context, "Holding: GCD emergency heal");
+            return;
+        }
+
         TryPushPhlegma(context, scheduler);
         TryDirectDispatchEukrasiaForDoT(context);
         TryPushDoT(context, scheduler);
