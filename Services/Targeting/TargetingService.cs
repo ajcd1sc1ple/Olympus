@@ -64,13 +64,8 @@ public sealed class TargetingService : ITargetingService
     }
 
     /// <summary>
-    /// Returns true when damage targeting should be suppressed because the player has
-    /// dropped their target and <see cref="Config.TargetingConfig.PauseWhenNoTarget"/> is on.
-    /// A brief null hard target (Tab retarget) does not pause — only a sustained drop
-    /// past <see cref="DamagePauseDecision.NoTargetGraceMs"/> does (gaze / disengage).
-    /// Out of combat, never pauses when <paramref name="player"/> is provided: the
-    /// engagement filter already blocks unpulled packs, and combat bootstrap needs
-    /// Count/Find to see tank-engaged enemies without a hard target.
+    /// Always false — <c>PauseWhenNoTarget</c> no longer stalls damage targeting.
+    /// Dual-boss swaps / Tab retargets used to freeze Find/Count after a short grace.
     /// </summary>
     public bool IsDamageTargetingPaused(IPlayerCharacter? player = null)
     {
@@ -105,16 +100,19 @@ public sealed class TargetingService : ITargetingService
 
     /// <summary>
     /// Whether CurrentTarget/FocusTarget may fall back to LowestHp this frame.
-    /// Strict mode still allows fallback during the retarget grace window.
+    /// Untargetable hard targets (diving shark) always allow fallback.
     /// </summary>
     private bool AllowExplicitTargetFallback()
     {
-        var hasHardTarget = _targetManager.Target != null;
+        var hard = _targetManager.Target;
+        var hasHardTarget = hard != null;
+        var hardTargetUsable = hard is IBattleNpc b && !b.IsDead && b.IsTargetable;
         var noTargetDurationMs = UpdateNoTargetDurationMs(hasHardTarget);
         return DamagePauseDecision.AllowExplicitTargetFallback(
             strictCurrentTargetStrategy: _configuration.Targeting.StrictCurrentTargetStrategy,
             hasHardTarget: hasHardTarget,
-            noTargetDurationMs: noTargetDurationMs);
+            noTargetDurationMs: noTargetDurationMs,
+            hardTargetUsable: hardTargetUsable);
     }
 
     /// <inheritdoc />
@@ -683,9 +681,25 @@ public sealed class TargetingService : ITargetingService
     private IBattleNpc? FindCurrentTarget(float maxRange, IPlayerCharacter player)
     {
         var target = _targetManager.Target;
-        // Allow brief IsTargetable flicker on the player's explicit target.
-        if (target is IBattleNpc enemy && IsValidEnemy(enemy, maxRange, player, allowUntargetable: true))
+        if (target is not IBattleNpc enemy)
+            return null;
+
+        // Usable hard target.
+        if (enemy.IsTargetable && IsValidEnemy(enemy, maxRange, player))
             return enemy;
+
+        // Untargetable hard target (Anyder water dive, brief boss flicker): only keep it when
+        // nothing else is selectable. Otherwise return null so LowestHp can pick the sibling.
+        if (!enemy.IsTargetable && IsValidEnemy(enemy, maxRange, player, allowUntargetable: true))
+        {
+            foreach (var other in GetValidEnemies(maxRange, player))
+            {
+                if (other.GameObjectId != enemy.GameObjectId)
+                    return null;
+            }
+
+            return enemy;
+        }
 
         return null;
     }
@@ -721,7 +735,7 @@ public sealed class TargetingService : ITargetingService
             }
         }
 
-        // Rebuild cache
+        // Rebuild cache (collect first, then filter — do not yield mid-rebuild).
         _cachedEnemies.Clear();
         _lastCacheRange = maxRange;
         _cacheTimer.Restart();
@@ -794,8 +808,26 @@ public sealed class TargetingService : ITargetingService
                 continue;
 
             _cachedEnemies.Add(npc);
-            yield return npc;
         }
+
+        // Prefer targetable enemies. Keep an untargetable hard target only when it is the
+        // sole candidate (brief boss IsTargetable flicker). Dual-boss water swaps
+        // (Akadaemia Anyder sharks) must not keep the diving shark selected for damage.
+        var hasTargetable = false;
+        for (var i = 0; i < _cachedEnemies.Count; i++)
+        {
+            if (_cachedEnemies[i].IsTargetable)
+            {
+                hasTargetable = true;
+                break;
+            }
+        }
+
+        if (hasTargetable)
+            _cachedEnemies.RemoveAll(static e => !e.IsTargetable);
+
+        foreach (var enemy in _cachedEnemies)
+            yield return enemy;
     }
 
     private bool IsValidEnemy(IBattleNpc enemy, float maxRange, IPlayerCharacter player, bool allowUntargetable = false)
@@ -817,12 +849,25 @@ public sealed class TargetingService : ITargetingService
         if (enemy.IsDead)
             return false;
 
-        // Keep cached hard target through brief IsTargetable flicker.
-        if (_targetManager.Target is IBattleNpc hard
-            && hard.GameObjectId == enemy.GameObjectId)
+        // Drop untargetable entries from the cache when a targetable sibling exists so
+        // dual-boss dives do not keep the underwater shark selected across TTL frames.
+        if (enemy.IsTargetable)
             return true;
 
-        return enemy.IsTargetable;
+        if (_targetManager.Target is IBattleNpc hard
+            && hard.GameObjectId == enemy.GameObjectId)
+        {
+            for (var i = 0; i < _cachedEnemies.Count; i++)
+            {
+                var other = _cachedEnemies[i];
+                if (other.GameObjectId != enemy.GameObjectId && other.IsTargetable)
+                    return false;
+            }
+
+            return true; // sole candidate — brief flicker
+        }
+
+        return false;
     }
 
     /// <summary>

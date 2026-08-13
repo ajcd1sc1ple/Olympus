@@ -20,13 +20,18 @@ namespace Olympus.Tests.Services.Targeting;
 /// </summary>
 public sealed class EngagementFilterTests
 {
-    private static Mock<IBattleNpc> MakeEnemy(ulong id, uint hp, StatusFlags flags, Vector3? pos = null)
+    private static Mock<IBattleNpc> MakeEnemy(
+        ulong id,
+        uint hp,
+        StatusFlags flags,
+        Vector3? pos = null,
+        bool isTargetable = true)
     {
         var mock = new Mock<IBattleNpc>();
         mock.Setup(x => x.GameObjectId).Returns(id);
         mock.Setup(x => x.EntityId).Returns((uint)id);
         mock.Setup(x => x.ObjectKind).Returns(ObjectKind.BattleNpc);
-        mock.Setup(x => x.IsTargetable).Returns(true);
+        mock.Setup(x => x.IsTargetable).Returns(isTargetable);
         mock.Setup(x => x.IsDead).Returns(false);
         mock.Setup(x => x.CurrentDistance).Returns(5);
         mock.Setup(x => x.SubKind).Returns((byte)0);
@@ -185,8 +190,9 @@ public sealed class EngagementFilterTests
     }
 
     [Fact]
-    public void PlayerInCombat_SustainedNullHardTarget_PausesAfterGrace()
+    public void PlayerInCombat_SustainedNullHardTarget_DoesNotPauseFindOrCount()
     {
+        // PauseWhenNoTarget stalls removed — keep DPS on engaged hostiles without a hard target.
         var shark = MakeEnemy(12, hp: 8_000, StatusFlags.InCombat);
         var svc = BuildService([shark.Object], currentTarget: null);
         var player = MakePlayer(StatusFlags.InCombat);
@@ -195,9 +201,31 @@ public sealed class EngagementFilterTests
 
         Thread.Sleep(DamagePauseDecision.NoTargetGraceMs + 50);
 
-        Assert.True(svc.IsDamageTargetingPaused(player));
-        Assert.Equal(0, svc.CountEnemiesInRange(25f, player));
-        Assert.Null(svc.FindEnemy(EnemyTargetingStrategy.LowestHp, 25f, player));
+        Assert.False(svc.IsDamageTargetingPaused(player));
+        Assert.Equal(1, svc.CountEnemiesInRange(25f, player));
+        Assert.NotNull(svc.FindEnemy(EnemyTargetingStrategy.LowestHp, 25f, player));
+    }
+
+    [Fact]
+    public void UntargetableHardTarget_WithTargetableSibling_SelectsSibling()
+    {
+        // Clear Ichthyology: diving shark stays hard-targeted but IsTargetable=false.
+        var diving = MakeEnemy(20, hp: 2_000, StatusFlags.InCombat, isTargetable: false);
+        var surfaced = MakeEnemy(21, hp: 8_000, StatusFlags.InCombat, isTargetable: true);
+
+        var svc = BuildService([diving.Object, surfaced.Object], currentTarget: diving.Object);
+        var player = MakePlayer(StatusFlags.InCombat);
+
+        Assert.False(svc.IsDamageTargetingPaused(player));
+        Assert.Equal(1, svc.CountEnemiesInRange(25f, player));
+
+        var lowest = svc.FindEnemy(EnemyTargetingStrategy.LowestHp, 25f, player);
+        Assert.NotNull(lowest);
+        Assert.Equal(21ul, lowest!.GameObjectId);
+
+        var current = svc.FindEnemy(EnemyTargetingStrategy.CurrentTarget, 25f, player);
+        Assert.NotNull(current);
+        Assert.Equal(21ul, current!.GameObjectId);
     }
 
     [Fact]

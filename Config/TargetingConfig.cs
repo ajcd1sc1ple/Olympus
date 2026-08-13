@@ -24,14 +24,11 @@ public sealed class TargetingConfig
     public int TargetCacheTtlMs { get; set; } = 100;
 
     /// <summary>
-    /// When true, all damage targeting is suppressed after the hard target stays null past a
-    /// short grace window (see <c>DamagePauseDecision.NoTargetGraceMs</c>). This is the primary
-    /// safeguard for gaze mechanics (drop target to look away) and intentional disengage.
-    /// Brief null gaps while Tabbing between enemies do not pause. Out of combat, pause does
-    /// not apply when the local player is known — engagement filtering prevents accidental pulls.
-    /// Default ON.
+    /// When true, historically suppressed damage after a sustained null hard target (gaze).
+    /// Retained for config compatibility; damage targeting no longer stalls on null target —
+    /// dual-boss swaps and Tab retargets were freezing DPS. Default OFF.
     /// </summary>
-    public bool PauseWhenNoTarget { get; set; } = true;
+    public bool PauseWhenNoTarget { get; set; } = false;
 
     /// <summary>
     /// When true, damage module execution is suppressed while the player has any

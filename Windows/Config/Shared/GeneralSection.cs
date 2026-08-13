@@ -112,13 +112,14 @@ public sealed class GeneralSection
 
         ConfigUIHelpers.Spacing();
 
-        // Safety toggles — protect against gaze mechanics and unintentional target retargeting.
+        // Safety toggles — PauseWhenNoTarget is retained in config but no longer stalls DPS
+        // (dual-boss / Tab freezes). Engagement filtering still blocks unpulled packs.
         ConfigUIHelpers.Toggle(
-            Loc.T(LocalizedStrings.Targeting.PauseWhenNoTarget, "Pause damage when no target"),
+            Loc.T(LocalizedStrings.Targeting.PauseWhenNoTarget, "Pause damage when no target (unused)"),
             () => this.config.Targeting.PauseWhenNoTarget,
             v => this.config.Targeting.PauseWhenNoTarget = v,
             Loc.T(LocalizedStrings.Targeting.PauseWhenNoTargetDesc,
-                "Stop attacking after you drop your target (brief Tab switches are ignored). Lets you look away for gaze mechanics or disengage without Olympus picking a new enemy."),
+                "No longer used. Olympus keeps DPS on selectable enemies even with no hard target (Anyder shark swaps, Tab retarget). Turned off to stop mid-fight stalls."),
             this.save);
 
         ConfigUIHelpers.Toggle(
