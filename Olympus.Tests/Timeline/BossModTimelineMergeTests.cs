@@ -95,13 +95,15 @@ public class BossModTimelineMergeTests
     }
 
     [Fact]
-    public void MergeTankBusterForGcdHealPrep_IgnoresCastHint()
+    public void MergeTankBusterForGcdHealPrep_KeepsCastHint()
     {
+        // TB cast-hints are the primary BossMod signal for many fights; GCD E.Diagnosis
+        // must not wait for Timeline-only entries.
         var merged = BossModTimelineMerge.MergeTankBusterForGcdHealPrep(8f, 1f, null);
 
         Assert.NotNull(merged);
-        Assert.Equal("BossMod tankbuster (timeline)", merged!.Value.Name);
-        Assert.Equal(8f, merged.Value.SecondsUntil);
+        Assert.Equal("BossMod tankbuster (cast)", merged!.Value.Name);
+        Assert.Equal(1f, merged.Value.SecondsUntil);
     }
 
     [Fact]

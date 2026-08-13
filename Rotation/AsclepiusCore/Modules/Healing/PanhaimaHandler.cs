@@ -55,6 +55,11 @@ public sealed class PanhaimaHandler : IHealingHandler
 
         var raidwideImminent = TimelineHelper.IsRaidwideImminent(
             context.TimelineService, context.BossMechanicDetector, context.Configuration, out var raidwideSource);
+        if (!raidwideImminent)
+        {
+            raidwideImminent = TimelineHelper.IsAoEShieldPrepImminent(
+                context.TimelineService, context.BossMechanicDetector, context.Configuration, out raidwideSource);
+        }
 
         if (avgHp > config.PanhaimaThreshold && !raidwideImminent) { context.Debug.PanhaimaState = $"Avg HP {avgHp:P0}"; return; }
 

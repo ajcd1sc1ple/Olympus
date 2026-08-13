@@ -1,6 +1,7 @@
 using System;
 using Olympus.Config;
 using Olympus.Data;
+using Olympus.Rotation.ApolloCore.Helpers;
 using Olympus.Rotation.AsclepiusCore.Abilities;
 using Olympus.Rotation.AsclepiusCore.Context;
 using Olympus.Rotation.Common.Scheduling;
@@ -51,12 +52,26 @@ public sealed class HolosHandler : IHealingHandler
         if (!context.ActionService.IsActionReady(SGEActions.Holos.ActionId)) { context.Debug.HolosState = "On CD"; return; }
 
         var (avgHp, lowestHp, injuredCount) = context.PartyHelper.CalculatePartyHealthMetrics(player);
-        if (lowestHp > config.HolosThreshold) { context.Debug.HolosState = $"Lowest HP {lowestHp:P0}"; return; }
-        if (injuredCount < config.AoEHealMinTargets) { context.Debug.HolosState = $"{injuredCount} injured"; return; }
+
+        var raidwideImminent = TimelineHelper.IsRaidwideImminent(
+            context.TimelineService, context.BossMechanicDetector, context.Configuration, out _);
+        if (!raidwideImminent)
+        {
+            raidwideImminent = TimelineHelper.IsAoEShieldPrepImminent(
+                context.TimelineService, context.BossMechanicDetector, context.Configuration, out _);
+        }
+
+        // Proactive before big AoE; otherwise only as emergency when party is low.
+        if (!raidwideImminent)
+        {
+            if (lowestHp > config.HolosThreshold) { context.Debug.HolosState = $"Lowest HP {lowestHp:P0}"; return; }
+            if (injuredCount < config.AoEHealMinTargets) { context.Debug.HolosState = $"{injuredCount} injured"; return; }
+        }
 
         var capturedAvgHp = avgHp;
         var capturedLowestHp = lowestHp;
         var capturedInjuredCount = injuredCount;
+        var capturedRaidwide = raidwideImminent;
         var action = SGEActions.Holos;
 
         scheduler.PushOgcd(AsclepiusAbilities.Holos, player.GameObjectId, priority: Priority,
@@ -69,14 +84,16 @@ public sealed class HolosHandler : IHealingHandler
 
                 if (context.TrainingService?.IsTrainingEnabled == true)
                 {
-                    var shortReason = $"Holos - emergency heal ({capturedLowestHp:P0} lowest, {capturedInjuredCount} injured)";
+                    var shortReason = capturedRaidwide
+                        ? "Holos - raidwide incoming!"
+                        : $"Holos - emergency heal ({capturedLowestHp:P0} lowest, {capturedInjuredCount} injured)";
                     var factors = new[]
                     {
                         $"Lowest HP: {capturedLowestHp:P0}",
                         $"Threshold: {config.HolosThreshold:P0}",
                         $"Injured count: {capturedInjuredCount}",
                         "300 potency heal + shield + 10% mit (20s)",
-                        "120s cooldown - big emergency button",
+                        capturedRaidwide ? "Raidwide/stack imminent" : "120s cooldown - big emergency button",
                     };
 
                     context.TrainingService.RecordDecision(new ActionExplanation
@@ -87,7 +104,9 @@ public sealed class HolosHandler : IHealingHandler
                         Category = "Healing",
                         TargetName = "Party",
                         ShortReason = shortReason,
-                        DetailedReason = $"Holos used as emergency response. Party at {capturedAvgHp:P0} avg HP with lowest at {capturedLowestHp:P0}. Provides 300 potency heal + 300 potency shield + 10% damage reduction for 20 seconds. This is SGE's panic button - save it for real emergencies!",
+                        DetailedReason = capturedRaidwide
+                            ? $"Holos placed proactively before raidwide/stack. Party at {capturedAvgHp:P0} avg HP. Heal + shield + 10% mit for 20s."
+                            : $"Holos used as emergency response. Party at {capturedAvgHp:P0} avg HP with lowest at {capturedLowestHp:P0}. Provides 300 potency heal + 300 potency shield + 10% damage reduction for 20 seconds. This is SGE's panic button - save it for real emergencies!",
                         Factors = factors,
                         Alternatives = _holosAlternatives,
                         Tip = "Holos is your 2-minute panic button! It does everything: heals, shields, AND mitigates. Save it for when things go wrong, or use proactively for massive incoming damage you know about.",

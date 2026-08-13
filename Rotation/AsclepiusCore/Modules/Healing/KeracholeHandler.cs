@@ -35,6 +35,12 @@ public sealed class KeracholeHandler : IHealingHandler
 
         var raidwideImminent = TimelineHelper.IsRaidwideImminent(
             context.TimelineService, context.BossMechanicDetector, context.Configuration, out var raidwideSource);
+        // Stack / shared party damage (e.g. Burning Coals) should also dump Kerachole.
+        if (!raidwideImminent)
+        {
+            raidwideImminent = TimelineHelper.IsAoEShieldPrepImminent(
+                context.TimelineService, context.BossMechanicDetector, context.Configuration, out raidwideSource);
+        }
 
         var burstImminent = false;
         var coordConfig = context.Configuration.PartyCoordination;

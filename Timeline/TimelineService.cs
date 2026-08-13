@@ -67,13 +67,16 @@ public sealed class TimelineService : ITimelineService, IDisposable
             if (isSimulating)
                 return loadedTimeline != null && state != null;
 
+            // BossMod module live: keep predictions even if the local InCombat flag
+            // lags at pull — otherwise E.Diagnosis / Kerachole prep sees null until
+            // the healer is tagged into combat.
+            if (IsBossModTimelineLive())
+                return true;
+
             if (!combatEventService.IsInCombat)
                 return false;
 
-            if (loadedTimeline != null && state != null)
-                return true;
-
-            return IsBossModTimelineLive();
+            return loadedTimeline != null && state != null;
         }
     }
 
@@ -530,7 +533,7 @@ public sealed class TimelineService : ITimelineService, IDisposable
 
     private void UpdateBossModOnly()
     {
-        if (!combatEventService.IsInCombat || !IsBossModTimelineLive())
+        if (!IsBossModTimelineLive())
         {
             if (cachedNextRaidwide != null || cachedNextTankBuster != null
                 || cachedNextRaidwideForGcdHealPrep != null || cachedNextTankBusterForGcdHealPrep != null

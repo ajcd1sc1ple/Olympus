@@ -77,15 +77,13 @@ public static class BossModTimelineMerge
     }
 
     /// <summary>
-    /// GCD tank-buster shield prep: Timeline + Cactbot only (same rationale as raidwide).
+    /// GCD tank-buster shield prep: keep BossMod cast-hints.
+    /// Unlike raidwide hints (bombs/bait), TB cast-hints are the primary BossMod signal
+    /// for many fights — dropping them left E.Diagnosis/Adlo with no prep source.
     /// </summary>
     public static MechanicPrediction? MergeTankBusterForGcdHealPrep(
         float? timelineSeconds,
         float? hintSeconds,
-        MechanicPrediction? cactbot)
-    {
-        _ = hintSeconds;
-        return FromSeconds(timelineSeconds, TimelineEntryType.TankBuster, "BossMod tankbuster (timeline)")
-               ?? cactbot;
-    }
+        MechanicPrediction? cactbot) =>
+        MergeTankBuster(timelineSeconds, hintSeconds, cactbot);
 }

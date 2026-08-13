@@ -105,4 +105,56 @@ public class TankBusterShieldPrepTests
             It.Is<ActionDefinition>(a => a.ActionId == SGEActions.Eukrasia.ActionId),
             It.IsAny<ulong>()), Times.Once);
     }
+
+    [Fact]
+    public void ShieldHealing_TankBusterCastHintOnly_WhileMoving_StillArmsEukrasia()
+    {
+        // BossMod often only exposes TB via cast-hint; GCD prep must use it.
+        // Eukrasian shields are instant — movement must not block prep.
+        var config = AsclepiusTestContext.CreateDefaultSageConfiguration();
+        config.Sage.EnableEukrasianDiagnosis = true;
+        config.Sage.EukrasianDiagnosisThreshold = 0.50f;
+        config.Sage.EnableEukrasianPrognosis = false;
+        config.Timeline.EnableTimelinePredictions = true;
+        config.Timeline.TimelineConfidenceThreshold = 0.8f;
+
+        var castHintOnly = new MechanicPrediction(2f, TimelineEntryType.TankBuster, "BossMod tankbuster (cast)", 0.95f);
+        var timeline = new Mock<ITimelineService>();
+        timeline.Setup(s => s.IsActive).Returns(true);
+        timeline.Setup(s => s.Confidence).Returns(1f);
+        timeline.Setup(s => s.NextTankBuster).Returns((MechanicPrediction?)castHintOnly);
+        timeline.Setup(s => s.NextTankBusterForGcdHealPrep).Returns((MechanicPrediction?)castHintOnly);
+
+        var tank = MockBuilders.CreateMockBattleChara(entityId: 10u, currentHp: 50000, maxHp: 50000);
+        tank.Setup(x => x.StatusList).Returns((Dalamud.Game.ClientState.Statuses.StatusList?)null!);
+
+        var partyHelper = MockBuilders.CreateMockPartyHelper();
+        partyHelper.Setup(p => p.CalculatePartyHealthMetrics(It.IsAny<Dalamud.Game.ClientState.Objects.SubKinds.IPlayerCharacter>()))
+            .Returns((avgHpPercent: 1.0f, lowestHpPercent: 1.0f, injuredCount: 0));
+        partyHelper.Setup(p => p.FindTankInParty(It.IsAny<Dalamud.Game.ClientState.Objects.SubKinds.IPlayerCharacter>()))
+            .Returns(tank.Object);
+        partyHelper.Setup(p => p.FindLowestHpPartyMember(It.IsAny<Dalamud.Game.ClientState.Objects.SubKinds.IPlayerCharacter>(), It.IsAny<int>()))
+            .Returns(tank.Object);
+
+        var actionService = MockBuilders.CreateMockActionService(canExecuteGcd: true);
+        actionService.Setup(x => x.ExecuteOgcd(
+                It.Is<ActionDefinition>(a => a.ActionId == SGEActions.Eukrasia.ActionId),
+                It.IsAny<ulong>()))
+            .Returns(true);
+
+        var context = AsclepiusTestContext.Create(
+            config: config,
+            partyHelper: partyHelper,
+            actionService: actionService,
+            timelineService: timeline,
+            level: 100,
+            hasEukrasia: false);
+
+        var scheduler = SchedulerFactory.CreateForTest(actionService);
+        new ShieldHealingHandler().CollectCandidates(context, scheduler, isMoving: true);
+
+        actionService.Verify(x => x.ExecuteOgcd(
+            It.Is<ActionDefinition>(a => a.ActionId == SGEActions.Eukrasia.ActionId),
+            It.IsAny<ulong>()), Times.Once);
+    }
 }

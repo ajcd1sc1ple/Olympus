@@ -23,15 +23,25 @@ public sealed class ShieldHealingHandler : IHealingHandler
 
     public void CollectCandidates(IAsclepiusContext context, RotationScheduler scheduler, bool isMoving)
     {
-        if (isMoving) return;
+        // Eukrasia + E.Diagnosis / E.Prognosis are all instant — do not skip while moving.
+        _ = isMoving;
 
         var config = context.Configuration.Sage;
         var player = context.Player;
 
         if (player.Level < SGEActions.Eukrasia.MinLevel) return;
 
+        // AoE: Timeline/Cactbot/Stack (no bomb cast-hints) OR BossMod raidwide cast-hint.
+        // Sticky AvoidOverwritingShields stops re-casting once E.Prognosis is up.
         var raidwideImminent = TimelineHelper.IsAoEShieldPrepImminent(
             context.TimelineService, context.BossMechanicDetector, context.Configuration, out _);
+        if (!raidwideImminent)
+        {
+            raidwideImminent = TimelineHelper.IsRaidwideImminent(
+                context.TimelineService, context.BossMechanicDetector, context.Configuration, out _);
+        }
+
+        // TB: GCD prep keeps cast-hints (MergeTankBusterForGcdHealPrep).
         var tankBusterImminent = TimelineHelper.IsTankBusterImminentForGcdHealPrep(
             context.TimelineService, context.BossMechanicDetector, context.Configuration, out _);
 
