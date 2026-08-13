@@ -118,7 +118,8 @@ public sealed class ResurrectionModule : BaseResurrectionModule<IAsclepiusContex
         if (player.CurrentMp < RaiseMpCost) return;
         if (!context.ActionService.IsActionReady(SwiftcastAction.ActionId)) return;
 
-        scheduler.PushOgcd(AsclepiusAbilities.Swiftcast, player.GameObjectId, priority: 1);
+        var prepPriority = RaiseModeEvaluator.GetRaisePrepPriority(config.Resurrection.RaiseMode);
+        scheduler.PushOgcd(AsclepiusAbilities.Swiftcast, player.GameObjectId, priority: prepPriority);
     }
 
     private void TryPushRaise(IAsclepiusContext context, RotationScheduler scheduler, bool isMoving)
@@ -146,6 +147,14 @@ public sealed class ResurrectionModule : BaseResurrectionModule<IAsclepiusContex
             return;
         }
 
+        var (avgHp, lowestHp, _) = context.PartyHelper.CalculatePartyHealthMetrics(player);
+        if (!RaiseModeEvaluator.TryGetRaiseGcdPriority(
+                config.Resurrection.RaiseMode, avgHp, lowestHp, out var raisePriority, out var skipReason))
+        {
+            SetRaiseState(context, skipReason ?? "Raise deferred");
+            return;
+        }
+
         var hasSwiftcast = HasSwiftcast(context);
 
         if (hasSwiftcast)
@@ -156,7 +165,7 @@ public sealed class ResurrectionModule : BaseResurrectionModule<IAsclepiusContex
                 return;
             }
 
-            scheduler.PushGcd(AsclepiusAbilities.Egeiro, target.GameObjectId, priority: 1,
+            scheduler.PushGcd(AsclepiusAbilities.Egeiro, target.GameObjectId, priority: raisePriority,
                 onDispatched: _ =>
                 {
                     var note = GetRaiseSuccessNote(context, hasSwiftcast: true);
@@ -180,7 +189,7 @@ public sealed class ResurrectionModule : BaseResurrectionModule<IAsclepiusContex
                     return;
                 }
 
-                scheduler.PushGcd(AsclepiusAbilities.Egeiro, target.GameObjectId, priority: 1,
+                scheduler.PushGcd(AsclepiusAbilities.Egeiro, target.GameObjectId, priority: raisePriority,
                     onDispatched: _ =>
                     {
                         var note = GetRaiseSuccessNote(context, hasSwiftcast: false);

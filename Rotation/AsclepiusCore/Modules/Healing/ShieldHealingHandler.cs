@@ -48,7 +48,7 @@ public sealed class ShieldHealingHandler : IHealingHandler
 
         // Don't re-arm Eukrasia for AoE when E.Prognosis shields are already up.
         // Symmetrical with the guard in TryPushEukrasianHealSpell; both sides agree.
-        if (shouldActivateForAoE)
+        if (shouldActivateForAoE && config.AvoidOverwritingShields)
         {
             var shieldCheckTarget = context.PartyHelper.FindLowestHpPartyMember(player);
             if (shieldCheckTarget != null && AsclepiusStatusHelper.HasEukrasianPrognosisShield(shieldCheckTarget))
@@ -84,7 +84,9 @@ public sealed class ShieldHealingHandler : IHealingHandler
             // Skip if party already has E.Prognosis shields -- avoids wasting a GCD and 1000 MP
             // re-casting identical shields mid-raidwide phase.
             var lowestHpMember = context.PartyHelper.FindLowestHpPartyMember(player);
-            if (lowestHpMember != null && AsclepiusStatusHelper.HasEukrasianPrognosisShield(lowestHpMember))
+            if (config.AvoidOverwritingShields
+                && lowestHpMember != null
+                && AsclepiusStatusHelper.HasEukrasianPrognosisShield(lowestHpMember))
             {
                 context.Debug.EukrasianPrognosisState = "Already shielded";
                 return;
@@ -164,7 +166,7 @@ public sealed class ShieldHealingHandler : IHealingHandler
                 context.Debug.EukrasianDiagnosisState = "Skipped (reserved)";
                 return;
             }
-            if (AsclepiusStatusHelper.HasEukrasianDiagnosisShield(target))
+            if (config.AvoidOverwritingShields && AsclepiusStatusHelper.HasEukrasianDiagnosisShield(target))
             {
                 context.Debug.EukrasianDiagnosisState = "Already shielded";
                 return;

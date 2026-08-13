@@ -260,23 +260,8 @@ public sealed class AstrologianSection
 
             ConfigUIHelpers.BeginDisabledGroup(!config.Astrologian.EnableCards);
 
-            var strategyNames = Enum.GetNames<CardPlayStrategy>();
-            var currentStrategy = (int)config.Astrologian.CardStrategy;
-            ImGui.SetNextItemWidth(150);
-            if (ImGui.Combo(Loc.T(LocalizedStrings.Astrologian.CardStrategy, "Card Strategy"), ref currentStrategy, strategyNames, strategyNames.Length))
-            {
-                config.Astrologian.CardStrategy = (CardPlayStrategy)currentStrategy;
-                save();
-            }
-
-            var strategyDesc = config.Astrologian.CardStrategy switch
-            {
-                CardPlayStrategy.DpsFocused => Loc.T(LocalizedStrings.Astrologian.CardStrategyDpsFocused, "Target highest-contributing DPS"),
-                CardPlayStrategy.Balanced => Loc.T(LocalizedStrings.Astrologian.CardStrategyBalanced, "Balance between DPS and support"),
-                CardPlayStrategy.SafetyFocused => Loc.T(LocalizedStrings.Astrologian.CardStrategySafetyFocused, "Prioritize safety over damage"),
-                _ => ""
-            };
-            ImGui.TextDisabled(strategyDesc);
+            ImGui.TextDisabled(Loc.T(LocalizedStrings.Astrologian.CardTargetingNote,
+                "Cards target melee-first for Astral and ranged-first for Umbral."));
 
             ConfigUIHelpers.Spacing();
             ConfigUIHelpers.SectionLabel(Loc.T(LocalizedStrings.Astrologian.MinorArcanaLabel, "Minor Arcana:"));

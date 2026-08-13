@@ -466,26 +466,28 @@ public enum EarthlyStarPlacementStrategy
     Manual
 }
 
-/// <summary>
-/// Card play targeting strategy.
-/// </summary>
-public enum CardPlayStrategy
-{
     /// <summary>
-    /// Target highest-contributing DPS for maximum damage.
+    /// Card play targeting strategy.
+    /// Retained for config serialization compatibility; UI removed — cards use
+    /// melee-first (Astral) / ranged-first (Umbral) targeting in CardModule.
     /// </summary>
-    DpsFocused,
+    public enum CardPlayStrategy
+    {
+        /// <summary>
+        /// Target highest-contributing DPS for maximum damage.
+        /// </summary>
+        DpsFocused,
 
-    /// <summary>
-    /// Balance between DPS and support.
-    /// </summary>
-    Balanced,
+        /// <summary>
+        /// Balance between DPS and support.
+        /// </summary>
+        Balanced,
 
-    /// <summary>
-    /// Prioritize safety over damage optimization.
-    /// </summary>
-    SafetyFocused
-}
+        /// <summary>
+        /// Prioritize safety over damage optimization.
+        /// </summary>
+        SafetyFocused
+    }
 
 /// <summary>
 /// Minor Arcana usage strategy.

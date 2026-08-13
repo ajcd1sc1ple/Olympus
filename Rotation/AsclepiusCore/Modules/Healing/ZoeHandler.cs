@@ -19,12 +19,19 @@ public sealed class ZoeHandler : IHealingHandler
         var player = context.Player;
 
         if (!config.EnableZoe) return;
+        if (config.ZoeStrategy == ZoeUsageStrategy.Manual)
+        {
+            context.Debug.ZoeState = "Manual";
+            return;
+        }
+
         if (player.Level < SGEActions.Zoe.MinLevel) return;
         if (context.HasZoe) { context.Debug.ZoeState = "Active"; return; }
         if (!context.ActionService.IsActionReady(SGEActions.Zoe.ActionId)) { context.Debug.ZoeState = "On CD"; return; }
 
-        var (_, lowestHp, _) = context.PartyHelper.CalculatePartyHealthMetrics(player);
-        if (lowestHp > config.DiagnosisThreshold) { context.Debug.ZoeState = $"Lowest HP {lowestHp:P0}"; return; }
+        var (avgHp, lowestHp, injuredCount) = context.PartyHelper.CalculatePartyHealthMetrics(player);
+        if (!ShouldArmZoe(config, avgHp, lowestHp, injuredCount, context))
+            return;
 
         var capturedLowestHp = lowestHp;
         var action = SGEActions.Zoe;
@@ -50,6 +57,7 @@ public sealed class ZoeHandler : IHealingHandler
                         Factors = new[]
                         {
                             $"Lowest HP: {capturedLowestHp:P0}",
+                            $"Strategy: {config.ZoeStrategy}",
                             "50% potency boost on next GCD heal",
                             "90s cooldown",
                             "Works on: Diagnosis, Prognosis, Pneuma, E.Diagnosis, E.Prognosis",
@@ -66,5 +74,68 @@ public sealed class ZoeHandler : IHealingHandler
                     });
                 }
             });
+    }
+
+    private static bool ShouldArmZoe(
+        SageConfig config,
+        float avgHp,
+        float lowestHp,
+        int injuredCount,
+        IAsclepiusContext context)
+    {
+        switch (config.ZoeStrategy)
+        {
+            case ZoeUsageStrategy.WithPneuma:
+                if (!config.EnablePneuma)
+                {
+                    context.Debug.ZoeState = "Waiting for Pneuma (disabled)";
+                    return false;
+                }
+
+                if (context.Player.Level < SGEActions.Pneuma.MinLevel)
+                {
+                    context.Debug.ZoeState = "Waiting for Pneuma (level)";
+                    return false;
+                }
+
+                if (!context.ActionService.IsActionReady(SGEActions.Pneuma.ActionId))
+                {
+                    context.Debug.ZoeState = "Waiting for Pneuma CD";
+                    return false;
+                }
+
+                if (avgHp > config.PneumaThreshold || injuredCount < config.AoEHealMinTargets)
+                {
+                    context.Debug.ZoeState = $"Waiting for Pneuma window (avg {avgHp:P0})";
+                    return false;
+                }
+
+                return true;
+
+            case ZoeUsageStrategy.WithEukrasianPrognosis:
+                if (!config.EnableEukrasianPrognosis)
+                {
+                    context.Debug.ZoeState = "Waiting for E.Prognosis (disabled)";
+                    return false;
+                }
+
+                if (injuredCount < config.AoEHealMinTargets || avgHp > config.AoEHealThreshold)
+                {
+                    context.Debug.ZoeState = $"Waiting for E.Prognosis window (avg {avgHp:P0})";
+                    return false;
+                }
+
+                return true;
+
+            case ZoeUsageStrategy.OnDemand:
+            default:
+                if (lowestHp > config.DiagnosisThreshold)
+                {
+                    context.Debug.ZoeState = $"Lowest HP {lowestHp:P0}";
+                    return false;
+                }
+
+                return true;
+        }
     }
 }

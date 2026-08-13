@@ -112,7 +112,8 @@ public sealed class ResurrectionModule : BaseResurrectionModule<IAthenaContext>,
         if (player.CurrentMp < RaiseMpCost) return;
         if (!context.ActionService.IsActionReady(SwiftcastAction.ActionId)) return;
 
-        scheduler.PushOgcd(AthenaAbilities.Swiftcast, player.GameObjectId, priority: 1);
+        var prepPriority = RaiseModeEvaluator.GetRaisePrepPriority(config.Resurrection.RaiseMode);
+        scheduler.PushOgcd(AthenaAbilities.Swiftcast, player.GameObjectId, priority: prepPriority);
     }
 
     private void TryPushRaise(IAthenaContext context, RotationScheduler scheduler, bool isMoving)
@@ -140,6 +141,14 @@ public sealed class ResurrectionModule : BaseResurrectionModule<IAthenaContext>,
             return;
         }
 
+        var (avgHp, lowestHp, _) = context.PartyHelper.CalculatePartyHealthMetrics(player);
+        if (!RaiseModeEvaluator.TryGetRaiseGcdPriority(
+                config.Resurrection.RaiseMode, avgHp, lowestHp, out var raisePriority, out var skipReason))
+        {
+            SetRaiseState(context, skipReason ?? "Raise deferred");
+            return;
+        }
+
         var hasSwiftcast = HasSwiftcast(context);
 
         if (hasSwiftcast)
@@ -150,7 +159,7 @@ public sealed class ResurrectionModule : BaseResurrectionModule<IAthenaContext>,
                 return;
             }
 
-            scheduler.PushGcd(AthenaAbilities.Resurrection, target.GameObjectId, priority: 1,
+            scheduler.PushGcd(AthenaAbilities.Resurrection, target.GameObjectId, priority: raisePriority,
                 onDispatched: _ =>
                 {
                     SetRaiseState(context, "Swiftcast Raise");
@@ -173,7 +182,7 @@ public sealed class ResurrectionModule : BaseResurrectionModule<IAthenaContext>,
                     return;
                 }
 
-                scheduler.PushGcd(AthenaAbilities.Resurrection, target.GameObjectId, priority: 1,
+                scheduler.PushGcd(AthenaAbilities.Resurrection, target.GameObjectId, priority: raisePriority,
                     onDispatched: _ =>
                     {
                         SetRaiseState(context, "Hardcast Raise");

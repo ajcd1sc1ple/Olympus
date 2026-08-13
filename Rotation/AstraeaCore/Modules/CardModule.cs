@@ -119,18 +119,24 @@ public sealed class CardModule : IAstraeaModule
 
         if (!context.HasCard) { context.Debug.PlayState = "No cards in hand"; return; }
 
-        var target = context.PartyHelper.FindBalanceTarget(player);
-        if (target == null) { context.Debug.PlayState = "No valid target"; return; }
+        // Astral cards prefer melee (Balance); umbral cards prefer ranged (Spear).
+        var balanceTarget = context.PartyHelper.FindBalanceTarget(player);
+        var spearTarget = context.PartyHelper.FindSpearTarget(player);
+        if (balanceTarget == null && spearTarget == null)
+        {
+            context.Debug.PlayState = "No valid target";
+            return;
+        }
 
-        // Push all 6 specific card actions. The scheduler will attempt each in priority order;
-        // only the actually-drawn card succeeds at UseAction time. Astral cards (Balance/Bole/Arrow)
-        // pushed before umbral cards (Spear/Ewer/Spire) to match legacy ordering.
-        TryPushSpecificCard(context, scheduler, AstraeaAbilities.TheBalance, ASTActions.TheBalance, target, priority: 2);
-        TryPushSpecificCard(context, scheduler, AstraeaAbilities.TheBole, ASTActions.TheBole, target, priority: 3);
-        TryPushSpecificCard(context, scheduler, AstraeaAbilities.TheArrow, ASTActions.TheArrow, target, priority: 4);
-        TryPushSpecificCard(context, scheduler, AstraeaAbilities.TheSpear, ASTActions.TheSpear, target, priority: 5);
-        TryPushSpecificCard(context, scheduler, AstraeaAbilities.TheEwer, ASTActions.TheEwer, target, priority: 6);
-        TryPushSpecificCard(context, scheduler, AstraeaAbilities.TheSpire, ASTActions.TheSpire, target, priority: 7);
+        var astralTarget = balanceTarget ?? spearTarget!;
+        var umbralTarget = spearTarget ?? balanceTarget!;
+
+        TryPushSpecificCard(context, scheduler, AstraeaAbilities.TheBalance, ASTActions.TheBalance, astralTarget, priority: 2);
+        TryPushSpecificCard(context, scheduler, AstraeaAbilities.TheBole, ASTActions.TheBole, astralTarget, priority: 3);
+        TryPushSpecificCard(context, scheduler, AstraeaAbilities.TheArrow, ASTActions.TheArrow, astralTarget, priority: 4);
+        TryPushSpecificCard(context, scheduler, AstraeaAbilities.TheSpear, ASTActions.TheSpear, umbralTarget, priority: 5);
+        TryPushSpecificCard(context, scheduler, AstraeaAbilities.TheEwer, ASTActions.TheEwer, umbralTarget, priority: 6);
+        TryPushSpecificCard(context, scheduler, AstraeaAbilities.TheSpire, ASTActions.TheSpire, umbralTarget, priority: 7);
     }
 
     private void TryPushSpecificCard(IAstraeaContext context, RotationScheduler scheduler,

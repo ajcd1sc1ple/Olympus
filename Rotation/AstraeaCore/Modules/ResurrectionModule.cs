@@ -127,7 +127,8 @@ public sealed class ResurrectionModule : BaseResurrectionModule<IAstraeaContext>
         if (player.CurrentMp < RaiseMpCost) return;
         if (!context.ActionService.IsActionReady(SwiftcastAction.ActionId)) return;
 
-        scheduler.PushOgcd(AstraeaAbilities.Swiftcast, player.GameObjectId, priority: 1);
+        var prepPriority = RaiseModeEvaluator.GetRaisePrepPriority(config.Resurrection.RaiseMode);
+        scheduler.PushOgcd(AstraeaAbilities.Swiftcast, player.GameObjectId, priority: prepPriority);
     }
 
     private void TryPushLightspeed(IAstraeaContext context, RotationScheduler scheduler)
@@ -149,7 +150,9 @@ public sealed class ResurrectionModule : BaseResurrectionModule<IAstraeaContext>
         // Only push Lightspeed when Swiftcast unavailable — otherwise Swiftcast wins same-frame
         if (context.ActionService.IsActionReady(SwiftcastAction.ActionId)) return;
 
-        scheduler.PushOgcd(AstraeaAbilities.Lightspeed, player.GameObjectId, priority: 2);
+        // Slightly below Swiftcast so Swiftcast wins same-frame when both are ready.
+        var prepPriority = RaiseModeEvaluator.GetRaisePrepPriority(config.Resurrection.RaiseMode) + 1;
+        scheduler.PushOgcd(AstraeaAbilities.Lightspeed, player.GameObjectId, priority: prepPriority);
     }
 
     private void TryPushRaise(IAstraeaContext context, RotationScheduler scheduler, bool isMoving)
@@ -177,6 +180,14 @@ public sealed class ResurrectionModule : BaseResurrectionModule<IAstraeaContext>
             return;
         }
 
+        var (avgHp, lowestHp, _) = context.PartyHelper.CalculatePartyHealthMetrics(player);
+        if (!RaiseModeEvaluator.TryGetRaiseGcdPriority(
+                config.Resurrection.RaiseMode, avgHp, lowestHp, out var raisePriority, out var skipReason))
+        {
+            SetRaiseState(context, skipReason ?? "Raise deferred");
+            return;
+        }
+
         var hasSwiftcast = HasSwiftcast(context);
 
         if (hasSwiftcast)
@@ -189,7 +200,7 @@ public sealed class ResurrectionModule : BaseResurrectionModule<IAstraeaContext>
                 return;
             }
 
-            scheduler.PushGcd(AstraeaAbilities.Ascend, target.GameObjectId, priority: 1,
+            scheduler.PushGcd(AstraeaAbilities.Ascend, target.GameObjectId, priority: raisePriority,
                 onDispatched: _ =>
                 {
                     SetRaiseState(context, "Instant Raise");
@@ -214,7 +225,7 @@ public sealed class ResurrectionModule : BaseResurrectionModule<IAstraeaContext>
                     return;
                 }
 
-                scheduler.PushGcd(AstraeaAbilities.Ascend, target.GameObjectId, priority: 1,
+                scheduler.PushGcd(AstraeaAbilities.Ascend, target.GameObjectId, priority: raisePriority,
                     onDispatched: _ =>
                     {
                         SetRaiseState(context, "Hardcast Raise");

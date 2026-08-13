@@ -519,6 +519,17 @@ public static class LocalizedStrings
 
         // Advanced healing settings
         public const string AdvancedHealingSettings = "config.job.whm.advanced_healing_settings";
+        public const string TriageMovedNote = "config.job.whm.triage_moved_note";
+        public const string EnableAggressiveLilyFlush = "config.job.whm.enable_aggressive_lily_flush";
+        public const string EnableAggressiveLilyFlushDesc = "config.job.whm.enable_aggressive_lily_flush_desc";
+        public const string EnableLilyCapPrevention = "config.job.whm.enable_lily_cap_prevention";
+        public const string EnableLilyCapPreventionDesc = "config.job.whm.enable_lily_cap_prevention_desc";
+        public const string EnableProactiveBenediction = "config.job.whm.enable_proactive_benediction";
+        public const string EnableProactiveBenedictionDesc = "config.job.whm.enable_proactive_benediction_desc";
+        public const string ProactiveBenedictionHp = "config.job.whm.proactive_benediction_hp";
+        public const string ProactiveBenedictionHpDesc = "config.job.whm.proactive_benediction_hp_desc";
+        public const string ProactiveBenedictionDps = "config.job.whm.proactive_benediction_dps";
+        public const string ProactiveBenedictionDpsDesc = "config.job.whm.proactive_benediction_dps_desc";
     }
 
     /// <summary>Keys for Scholar specific settings.</summary>
@@ -555,6 +566,8 @@ public static class LocalizedStrings
         public const string EnableExcogitation = "config.job.sch.enable_excogitation";
         public const string EnableIndomitability = "config.job.sch.enable_indomitability";
         public const string EnableProtraction = "config.job.sch.enable_protraction";
+        public const string ProtractionThreshold = "config.job.sch.protraction_threshold";
+        public const string ProtractionThresholdDesc = "config.job.sch.protraction_threshold_desc";
         public const string EnableRecitation = "config.job.sch.enable_recitation";
         public const string EnableSacredSoil = "config.job.sch.enable_sacred_soil";
         public const string RecitationTarget = "config.job.sch.recitation_target";
@@ -741,6 +754,7 @@ public static class LocalizedStrings
         // Cards
         public const string EnableCards = "config.job.ast.enable_cards";
         public const string EnableCardsDesc = "config.job.ast.enable_cards_desc";
+        public const string CardTargetingNote = "config.job.ast.card_targeting_note";
         public const string CardStrategy = "config.job.ast.card_strategy";
         public const string CardStrategyDpsFocused = "config.job.ast.card_strategy_dps_focused";
         public const string CardStrategyBalanced = "config.job.ast.card_strategy_balanced";
@@ -994,6 +1008,26 @@ public static class LocalizedStrings
         public const string BurstSection = "config.job.healer_shared.burst_section";
         public const string EnableBurstPooling = "config.job.healer_shared.enable_burst_pooling";
         public const string EnableBurstPoolingDesc = "config.job.healer_shared.enable_burst_pooling_desc";
+
+        // Triage (shared across healers)
+        public const string TriageSection = "config.job.healer_shared.triage_section";
+        public const string UseDamageBasedTriage = "config.job.healer_shared.use_damage_based_triage";
+        public const string UseDamageBasedTriageDesc = "config.job.healer_shared.use_damage_based_triage_desc";
+        public const string TriagePreset = "config.job.healer_shared.triage_preset";
+        public const string TriagePresetBalanced = "config.job.healer_shared.triage_preset_balanced";
+        public const string TriagePresetTankFocus = "config.job.healer_shared.triage_preset_tank_focus";
+        public const string TriagePresetSpreadDamage = "config.job.healer_shared.triage_preset_spread_damage";
+        public const string TriagePresetRaidWide = "config.job.healer_shared.triage_preset_raidwide";
+        public const string TriagePresetCustom = "config.job.healer_shared.triage_preset_custom";
+
+        // Co-healer awareness
+        public const string CoHealerSection = "config.job.healer_shared.co_healer_section";
+        public const string EnableCoHealerAwareness = "config.job.healer_shared.enable_co_healer_awareness";
+        public const string EnableCoHealerAwarenessDesc = "config.job.healer_shared.enable_co_healer_awareness_desc";
+        public const string CoHealerActiveWindow = "config.job.healer_shared.co_healer_active_window";
+        public const string CoHealerActiveWindowDesc = "config.job.healer_shared.co_healer_active_window_desc";
+        public const string CoHealerPendingHealThreshold = "config.job.healer_shared.co_healer_pending_heal_threshold";
+        public const string CoHealerPendingHealThresholdDesc = "config.job.healer_shared.co_healer_pending_heal_threshold_desc";
     }
 
     /// <summary>Keys for the shared Timeline Integration settings section.</summary>
