@@ -105,6 +105,56 @@ public static class TimelineHelper
     }
 
     /// <summary>
+    /// Stack / shared party-damage check for GCD AoE shield prep (Succor, Helios, E.Prognosis).
+    /// Uses BossMod <c>PredictedDamageType.Shared</c> (e.g. Burning Coals) or Cactbot Stack entries.
+    /// Does not use Raidwide cast-hints (spreads/bait AoEs).
+    /// </summary>
+    public static bool IsStackImminentForGcdHealPrep(
+        ITimelineService? timelineService,
+        Configuration config,
+        out string source,
+        float? windowSeconds = null)
+    {
+        source = "None";
+        var window = windowSeconds ?? config.Healing.RaidwidePreparationWindow;
+
+        if (config.Timeline.EnableTimelinePredictions &&
+            timelineService is not null &&
+            timelineService.IsActive &&
+            timelineService.Confidence >= config.Timeline.TimelineConfidenceThreshold)
+        {
+            var nextStack = timelineService.NextStackForGcdHealPrep;
+            if (nextStack.HasValue &&
+                nextStack.Value.SecondsUntil <= window &&
+                nextStack.Value.SecondsUntil > 0)
+            {
+                source = "Stack";
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// True when GCD AoE shields should be applied: imminent raidwide (Timeline/Cactbot) or
+    /// stack / shared damage (BossMod Shared / Cactbot Stack).
+    /// </summary>
+    public static bool IsAoEShieldPrepImminent(
+        ITimelineService? timelineService,
+        IBossMechanicDetector? bossMechanicDetector,
+        Configuration config,
+        out string source,
+        float? windowSeconds = null)
+    {
+        if (IsRaidwideImminentForGcdHealPrep(
+                timelineService, bossMechanicDetector, config, out source, windowSeconds))
+            return true;
+
+        return IsStackImminentForGcdHealPrep(timelineService, config, out source, windowSeconds);
+    }
+
+    /// <summary>
     /// Checks if a tank buster is imminent using the best available source.
     /// Returns true if timeline predicts a tank buster within the preparation window,
     /// or if the BossMechanicDetector (fallback) predicts one.

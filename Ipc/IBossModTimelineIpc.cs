@@ -41,6 +41,13 @@ public interface IBossModTimelineIpc
     float? NextTankbusterDamageIn();
 
     /// <summary>
+    /// Seconds until next stack / shared party damage from BossMod hints
+    /// (<c>PredictedDamageType.Shared</c>, e.g. Burning Coals). Distinct from
+    /// <see cref="NextRaidwideDamageIn"/> which also covers spreads/bait AoEs.
+    /// </summary>
+    float? NextSharedDamageIn();
+
+    /// <summary>
     /// Seconds until next downtime start (often untargetable).
     /// Returns null when unavailable / none scheduled.
     /// </summary>

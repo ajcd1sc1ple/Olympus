@@ -32,6 +32,7 @@ public sealed class TimelineService : ITimelineService, IDisposable
     private MechanicPrediction? cachedNextTankBuster;
     private MechanicPrediction? cachedNextRaidwideForGcdHealPrep;
     private MechanicPrediction? cachedNextTankBusterForGcdHealPrep;
+    private MechanicPrediction? cachedNextStackForGcdHealPrep;
     private float lastPredictionUpdateTime;
     private DateTime lastBossModOnlyRefreshUtc = DateTime.MinValue;
     private const float PredictionCacheRefreshInterval = 0.25f; // Refresh predictions every 250ms
@@ -114,6 +115,8 @@ public sealed class TimelineService : ITimelineService, IDisposable
     public MechanicPrediction? NextTankBuster => IsActive ? cachedNextTankBuster : null;
 
     public MechanicPrediction? NextTankBusterForGcdHealPrep => IsActive ? cachedNextTankBusterForGcdHealPrep : null;
+
+    public MechanicPrediction? NextStackForGcdHealPrep => IsActive ? cachedNextStackForGcdHealPrep : null;
 
     #endregion
 
@@ -497,6 +500,7 @@ public sealed class TimelineService : ITimelineService, IDisposable
             var hintRw = ipc.NextRaidwideDamageIn();
             var timelineTb = ipc.NextTankbusterIn();
             var hintTb = ipc.NextTankbusterDamageIn();
+            var cactbotStack = GetNextMechanicInternal(TimelineEntryType.Stack);
 
             // Display / oGCD: cast-hint preferred when present (real cast timing).
             cachedNextRaidwide = BossModTimelineMerge.MergeRaidwide(timelineRw, hintRw, cactbotRw);
@@ -507,6 +511,13 @@ public sealed class TimelineService : ITimelineService, IDisposable
                 timelineRw, hintRw, cactbotRw);
             cachedNextTankBusterForGcdHealPrep = BossModTimelineMerge.MergeTankBusterForGcdHealPrep(
                 timelineTb, hintTb, cactbotTb);
+
+            // Stack prep: BossMod Shared damage hints (Burning Coals) or Cactbot Stack entries.
+            // Shared is distinct from Raidwide hints (spreads/bait) that starved DPS.
+            cachedNextStackForGcdHealPrep =
+                BossModTimelineMerge.FromSeconds(
+                    ipc.NextSharedDamageIn(), TimelineEntryType.Stack, "BossMod stack (shared)")
+                ?? cactbotStack;
             return;
         }
 
@@ -514,6 +525,7 @@ public sealed class TimelineService : ITimelineService, IDisposable
         cachedNextTankBuster = cactbotTb;
         cachedNextRaidwideForGcdHealPrep = cactbotRw;
         cachedNextTankBusterForGcdHealPrep = cactbotTb;
+        cachedNextStackForGcdHealPrep = GetNextMechanicInternal(TimelineEntryType.Stack);
     }
 
     private void UpdateBossModOnly()
@@ -521,7 +533,8 @@ public sealed class TimelineService : ITimelineService, IDisposable
         if (!combatEventService.IsInCombat || !IsBossModTimelineLive())
         {
             if (cachedNextRaidwide != null || cachedNextTankBuster != null
-                || cachedNextRaidwideForGcdHealPrep != null || cachedNextTankBusterForGcdHealPrep != null)
+                || cachedNextRaidwideForGcdHealPrep != null || cachedNextTankBusterForGcdHealPrep != null
+                || cachedNextStackForGcdHealPrep != null)
                 ClearPredictionCache();
             return;
         }
@@ -579,6 +592,7 @@ public sealed class TimelineService : ITimelineService, IDisposable
         cachedNextTankBuster = null;
         cachedNextRaidwideForGcdHealPrep = null;
         cachedNextTankBusterForGcdHealPrep = null;
+        cachedNextStackForGcdHealPrep = null;
         lastPredictionUpdateTime = 0f;
         lastBossModOnlyRefreshUtc = DateTime.MinValue;
     }

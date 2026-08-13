@@ -18,6 +18,9 @@ public sealed class BossModTimelineIpc : IBossModTimelineIpc, IDisposable
     /// <summary>Ignore absurd far-future values from clock skew.</summary>
     private const float MaxUsefulSeconds = 600f;
 
+    /// <summary>BossMod AIHints.PredictedDamageType.Shared</summary>
+    private const int PredictedDamageTypeShared = 3;
+
     private readonly IPluginLog _log;
     private readonly ICallGateSubscriber<bool>? _hasActiveModule;
     private readonly ICallGateSubscriber<string?>? _activeModuleName;
@@ -25,6 +28,8 @@ public sealed class BossModTimelineIpc : IBossModTimelineIpc, IDisposable
     private readonly ICallGateSubscriber<float>? _nextTankbusterIn;
     private readonly ICallGateSubscriber<float>? _nextRaidwideDamageIn;
     private readonly ICallGateSubscriber<float>? _nextTankbusterDamageIn;
+    private readonly ICallGateSubscriber<float>? _nextDamageIn;
+    private readonly ICallGateSubscriber<int>? _nextDamageType;
     private readonly ICallGateSubscriber<float>? _nextDowntimeIn;
     private bool _loggedUnavailable;
 
@@ -40,6 +45,10 @@ public sealed class BossModTimelineIpc : IBossModTimelineIpc, IDisposable
             _nextTankbusterIn = pluginInterface.GetIpcSubscriber<float>("BossMod.Timeline.NextTankbusterIn");
             _nextRaidwideDamageIn = pluginInterface.GetIpcSubscriber<float>("BossMod.Hints.NextRaidwideDamageIn");
             _nextTankbusterDamageIn = pluginInterface.GetIpcSubscriber<float>("BossMod.Hints.NextTankbusterDamageIn");
+            // Stack markers use PredictedDamageType.Shared; BossMod exposes the soonest
+            // prediction via NextDamageIn/Type (no dedicated NextSharedDamageIn channel).
+            _nextDamageIn = pluginInterface.GetIpcSubscriber<float>("BossMod.Hints.NextDamageIn");
+            _nextDamageType = pluginInterface.GetIpcSubscriber<int>("BossMod.Hints.NextDamageType");
             _nextDowntimeIn = pluginInterface.GetIpcSubscriber<float>("BossMod.Timeline.NextDowntimeIn");
         }
         catch (Exception ex)
@@ -89,6 +98,16 @@ public sealed class BossModTimelineIpc : IBossModTimelineIpc, IDisposable
     public float? NextRaidwideDamageIn() => Normalize(TryInvoke(_nextRaidwideDamageIn, NoneSentinel));
 
     public float? NextTankbusterDamageIn() => Normalize(TryInvoke(_nextTankbusterDamageIn, NoneSentinel));
+
+    public float? NextSharedDamageIn()
+    {
+        // Prefer Shared when it is the soonest PredictedDamage entry. Spreads/bait AoEs
+        // use Raidwide and must not drive GCD shield prep (Anthracite AnthrabombSpread).
+        var type = TryInvoke(_nextDamageType, 0);
+        if (type != PredictedDamageTypeShared)
+            return null;
+        return Normalize(TryInvoke(_nextDamageIn, NoneSentinel));
+    }
 
     public float? NextDowntimeIn() => Normalize(TryInvoke(_nextDowntimeIn, NoneSentinel));
 

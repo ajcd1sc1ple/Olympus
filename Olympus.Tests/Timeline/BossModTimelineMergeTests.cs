@@ -105,6 +105,16 @@ public class BossModTimelineMergeTests
     }
 
     [Fact]
+    public void FromSeconds_StackShared_BuildsPrediction()
+    {
+        var merged = BossModTimelineMerge.FromSeconds(4.5f, TimelineEntryType.Stack, "BossMod stack (shared)");
+        Assert.NotNull(merged);
+        Assert.Equal(TimelineEntryType.Stack, merged!.Value.Type);
+        Assert.Equal(4.5f, merged.Value.SecondsUntil);
+        Assert.Equal("BossMod stack (shared)", merged.Value.Name);
+    }
+
+    [Fact]
     public void FromSeconds_RejectsNonPositive()
     {
         Assert.Null(BossModTimelineMerge.FromSeconds(null, TimelineEntryType.Raidwide, "x"));

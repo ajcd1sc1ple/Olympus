@@ -62,6 +62,12 @@ public interface ITimelineService
     MechanicPrediction? NextTankBusterForGcdHealPrep { get; }
 
     /// <summary>
+    /// Stack / shared party damage for GCD AoE shield prep (Cactbot Stack entries or
+    /// BossMod <c>PredictedDamageType.Shared</c>).
+    /// </summary>
+    MechanicPrediction? NextStackForGcdHealPrep { get; }
+
+    /// <summary>
     /// Checks if a mechanic of the specified type is imminent.
     /// </summary>
     /// <param name="type">The mechanic type to check for.</param>
