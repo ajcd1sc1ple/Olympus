@@ -1,8 +1,9 @@
 namespace Olympus.Ipc;
 
 /// <summary>
-/// BossMod / BossMod Reborn timeline + hint IPC (RSR-compatible channel names).
+/// BossMod / BossMod Reborn timeline IPC.
 /// Prefixed as <c>BossMod.*</c> by BossMod's IPC provider.
+/// Raidwide and tankbuster each use a single Timeline channel — no Hints dual-source.
 /// </summary>
 public interface IBossModTimelineIpc
 {
@@ -16,28 +17,16 @@ public interface IBossModTimelineIpc
     string? ActiveModuleName();
 
     /// <summary>
-    /// Seconds until next raidwide state transition.
+    /// Seconds until next raidwide from BossMod's Timeline API.
     /// Returns null when unavailable / none scheduled.
     /// </summary>
     float? NextRaidwideIn();
 
     /// <summary>
-    /// Seconds until next tankbuster state transition.
+    /// Seconds until next tankbuster from BossMod's Timeline API.
     /// Returns null when unavailable / none scheduled.
     /// </summary>
     float? NextTankbusterIn();
-
-    /// <summary>
-    /// Seconds until next predicted raidwide damage from AI hints (cast-based).
-    /// Returns null when unavailable / none scheduled.
-    /// </summary>
-    float? NextRaidwideDamageIn();
-
-    /// <summary>
-    /// Seconds until next predicted tankbuster damage from AI hints (cast-based).
-    /// Returns null when unavailable / none scheduled.
-    /// </summary>
-    float? NextTankbusterDamageIn();
 
     /// <summary>
     /// Seconds until next downtime start (often untargetable).

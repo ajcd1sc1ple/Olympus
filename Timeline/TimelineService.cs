@@ -13,7 +13,8 @@ namespace Olympus.Timeline;
 /// <summary>
 /// Runtime service for fight timeline tracking and mechanic prediction.
 /// Maintains timeline state, syncs to game events, and provides predictions to rotation modules.
-/// Merges embedded Cactbot timelines with BossMod Reborn timeline IPC when available.
+/// Merges embedded Cactbot timelines with BossMod Reborn Timeline IPC when available
+/// (single Timeline channel per mechanic — not Hints).
 /// </summary>
 public sealed class TimelineService : ITimelineService, IDisposable
 {
@@ -486,14 +487,8 @@ public sealed class TimelineService : ITimelineService, IDisposable
 
         if (IsBossModTimelineEnabled() && bossModTimeline is { } ipc && ipc.Available && ipc.HasActiveModule())
         {
-            cachedNextRaidwide = BossModTimelineMerge.MergeRaidwide(
-                ipc.NextRaidwideIn(),
-                ipc.NextRaidwideDamageIn(),
-                cactbotRw);
-            cachedNextTankBuster = BossModTimelineMerge.MergeTankBuster(
-                ipc.NextTankbusterIn(),
-                ipc.NextTankbusterDamageIn(),
-                cactbotTb);
+            cachedNextRaidwide = BossModTimelineMerge.MergeRaidwide(ipc.NextRaidwideIn(), cactbotRw);
+            cachedNextTankBuster = BossModTimelineMerge.MergeTankBuster(ipc.NextTankbusterIn(), cactbotTb);
             return;
         }
 

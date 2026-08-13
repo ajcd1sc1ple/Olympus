@@ -16,9 +16,10 @@ public sealed class TimelineConfig
     public bool EnableTimelinePredictions { get; set; } = true;
 
     /// <summary>
-    /// When true, prefer BossMod / BossMod Reborn timeline IPC (raidwide / tankbuster /
-    /// downtime) when an encounter module is active, merged with embedded Cactbot timelines.
-    /// Default on — same approach as Rotation Solver Reborn.
+    /// When true, use BossMod / BossMod Reborn <c>BossMod.Timeline.*</c> IPC for raidwide
+    /// and tankbuster when an encounter module is active. Cactbot embedded timelines are
+    /// fallback only when BossMod has no prediction. Does not use BossMod Hints channels.
+    /// Default on.
     /// </summary>
     public bool EnableBossModTimelineIntegration { get; set; } = true;
 

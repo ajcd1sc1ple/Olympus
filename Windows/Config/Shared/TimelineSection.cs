@@ -39,11 +39,11 @@ public sealed class TimelineSection
         ConfigUIHelpers.BeginIndent();
 
         ConfigUIHelpers.Toggle(
-            Loc.T(LocalizedStrings.Timeline.EnableBossModIntegration, "Use BossMod timeline (RSR-style)"),
+            Loc.T(LocalizedStrings.Timeline.EnableBossModIntegration, "Use BossMod timeline"),
             () => config.Timeline.EnableBossModTimelineIntegration,
             v => config.Timeline.EnableBossModTimelineIntegration = v,
             Loc.T(LocalizedStrings.Timeline.EnableBossModIntegrationDesc,
-                "When BossMod Reborn has an active encounter module, use its raidwide/tankbuster timing and merge with embedded Cactbot timelines. BossMod downtime hints are not used for untargetable holds (those stay Cactbot-only)."),
+                "When BossMod Reborn has an active encounter module, use BossMod.Timeline for raidwide/tankbuster timing. Embedded Cactbot timelines are used only when BossMod has no prediction. Untargetable holds stay Cactbot-only."),
             save);
 
         ConfigUIHelpers.Spacing();
