@@ -34,7 +34,7 @@ public sealed class DamageModule : IThemisModule
             return;
         }
 
-        if (!context.InCombat)
+        if (!context.InCombat && context.TargetingService.GetUserEnemyTarget() == null)
         {
             context.Debug.DamageState = "Not in combat";
             return;

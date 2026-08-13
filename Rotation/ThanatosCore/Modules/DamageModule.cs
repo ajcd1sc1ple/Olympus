@@ -42,7 +42,8 @@ public sealed class DamageModule : IThanatosModule
 
     public void CollectCandidates(IThanatosContext context, RotationScheduler scheduler, bool isMoving)
     {
-        if (!context.InCombat)
+        // Hostile hard target → DPS immediately (do not wait for server InCombat).
+        if (!context.InCombat && context.TargetingService.GetUserEnemyTarget() == null)
         {
             if (context.Configuration.PrePull.EnablePrePullActions
                 && context.Configuration.Reaper.EnableHarvestMoon

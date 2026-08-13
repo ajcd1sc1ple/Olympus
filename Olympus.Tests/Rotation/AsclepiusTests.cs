@@ -214,6 +214,40 @@ public class AsclepiusTests
     }
 
     [Fact]
+    public void DamageModule_CollectCandidates_OutOfCombat_WithHostileHardTarget_PushesDosis()
+    {
+        // Targeting an enemy is enough — do not wait for server InCombat.
+        var module = new DamageModule();
+        var config = AsclepiusTestContext.CreateDefaultSageConfiguration();
+
+        var enemy = new Mock<IBattleNpc>();
+        enemy.Setup(x => x.GameObjectId).Returns(42ul);
+        var targetingService = MockBuilders.CreateMockTargetingService();
+        targetingService.Setup(x => x.GetUserEnemyTarget()).Returns(enemy.Object);
+        targetingService.Setup(x => x.FindEnemy(
+            It.IsAny<EnemyTargetingStrategy>(),
+            It.IsAny<float>(),
+            It.IsAny<IPlayerCharacter>()))
+            .Returns(enemy.Object);
+
+        var actionService = MockBuilders.CreateMockActionService(canExecuteGcd: true);
+        var context = AsclepiusTestContext.Create(
+            config: config,
+            actionService: actionService,
+            targetingService: targetingService,
+            level: 90,
+            inCombat: false,
+            canExecuteGcd: true);
+
+        var scheduler = SchedulerFactory.CreateForTest(actionService);
+        module.CollectCandidates(context, scheduler, isMoving: false);
+
+        Assert.Contains(
+            scheduler.InspectGcdQueue(),
+            c => c.Behavior.Action.ActionId == SGEActions.DosisIII.ActionId);
+    }
+
+    [Fact]
     public void DamageModule_CollectCandidates_AllDamageDisabled_PushesNothing()
     {
         var module = new DamageModule();

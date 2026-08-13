@@ -33,7 +33,7 @@ public sealed class DamageModule : INyxModule
     public void CollectCandidates(INyxContext context, RotationScheduler scheduler, bool isMoving)
     {
         if (!context.Configuration.Tank.EnableDamage) { context.Debug.DamageState = "Disabled"; return; }
-        if (!context.InCombat) { context.Debug.DamageState = "Not in combat"; return; }
+        if (!context.InCombat && context.TargetingService.GetUserEnemyTarget() == null) { context.Debug.DamageState = "Not in combat"; return; }
         if (context.TargetingService.IsDamageTargetingPaused()) { context.Debug.DamageState = "Paused (no target)"; return; }
 
         var player = context.Player;

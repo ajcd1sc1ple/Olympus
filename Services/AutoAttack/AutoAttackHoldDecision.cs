@@ -43,9 +43,9 @@ public static class AutoAttackHoldDecision
         if (targetIsDead || engagedTargetDied)
             return false;
 
-        // Living hard target while holding / in combat / already AA: keep or start AA.
-        // Keep finishing until death — do not idle when the server combat flag flickers.
-        if (hasLivingHostileTarget && (isHoldingUntilDead || inCombat || currentlyAutoAttacking))
+        // Living hard target while holding / in combat / already AA / any living hostile:
+        // keep or start AA. Targeting an enemy is enough — do not wait for server InCombat.
+        if (hasLivingHostileTarget)
             return true;
 
         // Soft hold: engaged target still alive but hard target dropped (gaze, etc.).
@@ -83,7 +83,7 @@ public static class AutoAttackHoldDecision
         if (targetIsDead || engagedTargetDied)
             return false;
 
-        if (hasLivingHostileTarget && (inCombat || currentlyAutoAttacking))
+        if (hasLivingHostileTarget)
             return true;
 
         // Keep holding while the engaged enemy is still alive even if InCombat or hard-target flickers.
@@ -91,9 +91,12 @@ public static class AutoAttackHoldDecision
     }
 
     /// <summary>
-    /// Whether rotations should treat this frame as in-combat because we are finishing a living target.
+    /// Whether rotations should treat this frame as in-combat because we are finishing a living target
+    /// or the player has already committed a living hostile hard target.
     /// Holding until the engaged enemy dies keeps combat true even if the hard target briefly
     /// loses IsTargetable or the server InCombat / AA flags flicker off at low HP.
+    /// A living hostile hard target alone also bootstraps combat so healers (who often never
+    /// press AA) can DPS at pull before their own server InCombat flag flips.
     /// </summary>
     public static bool ShouldTreatAsInCombat(
         bool managementEnabled,
@@ -103,6 +106,6 @@ public static class AutoAttackHoldDecision
         bool engagedTargetStillAlive = false) =>
         managementEnabled
         && (
-            (isHoldingUntilDead && (hasLivingHostileTarget || engagedTargetStillAlive))
-            || (hasLivingHostileTarget && currentlyAutoAttacking));
+            hasLivingHostileTarget
+            || (isHoldingUntilDead && engagedTargetStillAlive));
 }

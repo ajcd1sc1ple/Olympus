@@ -48,8 +48,10 @@ public sealed class DamageModule : IIrisModule
         {
             TryPushPrePullHardcast(context, scheduler);
             TryPushPrepaintMotif(context, scheduler);
-            return;
         }
+        // Hostile hard target → keep DPS even before server InCombat flips.
+        if (!context.InCombat && context.TargetingService.GetUserEnemyTarget() == null)
+            return;
 
         if (context.IsCasting && !context.CanSlidecast) return;
 

@@ -43,8 +43,10 @@ public sealed class DamageModule : ICirceModule
     public void CollectCandidates(ICirceContext context, RotationScheduler scheduler, bool isMoving)
     {
         if (!context.InCombat)
-        {
             TryPushPrePullHardcast(context, scheduler);
+        // Hostile hard target → keep DPS even before server InCombat flips.
+        if (!context.InCombat && context.TargetingService.GetUserEnemyTarget() == null)
+        {
             context.Debug.DamageState = "Not in combat";
             return;
         }

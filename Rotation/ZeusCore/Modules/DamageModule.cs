@@ -39,7 +39,7 @@ public sealed class DamageModule : IZeusModule
 
     public void CollectCandidates(IZeusContext context, RotationScheduler scheduler, bool isMoving)
     {
-        if (!context.InCombat)
+        if (!context.InCombat && context.TargetingService.GetUserEnemyTarget() == null)
         {
             context.Debug.DamageState = "Not in combat";
             return;

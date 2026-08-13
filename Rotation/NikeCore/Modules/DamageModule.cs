@@ -40,7 +40,7 @@ public sealed class DamageModule : INikeModule
 
     public void CollectCandidates(INikeContext context, RotationScheduler scheduler, bool isMoving)
     {
-        if (!context.InCombat)
+        if (!context.InCombat && context.TargetingService.GetUserEnemyTarget() == null)
         {
             context.Debug.DamageState = "Not in combat";
             return;

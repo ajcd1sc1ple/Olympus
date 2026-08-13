@@ -44,7 +44,7 @@ public class AutoAttackHoldDecisionTests
     }
 
     [Fact]
-    public void GetDesiredState_DoesNotEnablePrePullWithoutCombatOrHold()
+    public void GetDesiredState_LivingHostileHardTarget_EnablesAutoAttack()
     {
         var desired = AutoAttackHoldDecision.GetDesiredState(
             managementEnabled: true,
@@ -59,7 +59,7 @@ public class AutoAttackHoldDecisionTests
             isHoldingUntilDead: false,
             standStillPunisherActive: false);
 
-        Assert.Null(desired);
+        Assert.True(desired);
     }
 
     [Fact]
@@ -133,9 +133,9 @@ public class AutoAttackHoldDecisionTests
     }
 
     [Fact]
-    public void ShouldHold_DoesNotStartOnTargetAloneWithoutAaOrCombat()
+    public void ShouldHold_StartsOnLivingHostileHardTargetAlone()
     {
-        Assert.False(AutoAttackHoldDecision.ShouldHold(
+        Assert.True(AutoAttackHoldDecision.ShouldHold(
             currentlyHolding: false,
             inCombat: false,
             currentlyAutoAttacking: false,
@@ -185,7 +185,8 @@ public class AutoAttackHoldDecisionTests
     {
         Assert.True(AutoAttackHoldDecision.ShouldTreatAsInCombat(true, true, true));
         Assert.True(AutoAttackHoldDecision.ShouldTreatAsInCombat(true, false, true, currentlyAutoAttacking: true));
-        Assert.False(AutoAttackHoldDecision.ShouldTreatAsInCombat(true, false, true, currentlyAutoAttacking: false));
+        // Living hostile hard target alone bootstraps combat (healers rarely press AA).
+        Assert.True(AutoAttackHoldDecision.ShouldTreatAsInCombat(true, false, true, currentlyAutoAttacking: false));
         Assert.False(AutoAttackHoldDecision.ShouldTreatAsInCombat(true, true, false));
         Assert.False(AutoAttackHoldDecision.ShouldTreatAsInCombat(false, true, true));
     }

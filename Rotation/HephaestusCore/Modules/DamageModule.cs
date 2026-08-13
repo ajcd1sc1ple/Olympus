@@ -41,7 +41,7 @@ public sealed class DamageModule : IHephaestusModule
             return;
         }
 
-        if (!context.InCombat)
+        if (!context.InCombat && context.TargetingService.GetUserEnemyTarget() == null)
         {
             context.Debug.DamageState = "Not in combat";
             return;

@@ -28,7 +28,7 @@ public sealed class DamageModule : IAresModule
             return;
         }
 
-        if (!context.InCombat)
+        if (!context.InCombat && context.TargetingService.GetUserEnemyTarget() == null)
         {
             context.Debug.DamageState = "Not in combat";
             return;

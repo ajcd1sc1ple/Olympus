@@ -147,7 +147,7 @@ public abstract class BaseDamageModule<TContext> : IHealerRotationModule<TContex
 
     public virtual bool TryExecute(TContext context, bool isMoving)
     {
-        if (!context.InCombat)
+        if (!context.InCombat && context.TargetingService.GetUserEnemyTarget() == null)
         {
             SetDpsState(context, "Not in combat");
             return false;

@@ -144,4 +144,20 @@ public sealed class EngagementFilterTests
         Assert.NotNull(lowest);
         Assert.Equal(5ul, lowest!.GameObjectId);
     }
+
+    [Fact]
+    public void PlayerOutOfCombat_EngagedBossWithoutHardTarget_IsSelectable()
+    {
+        // Tank already pulled: boss has InCombat, healer still OOC and may have the tank
+        // (or nothing) targeted. Count/Find must still see the boss so combat bootstrap works.
+        var boss = MakeEnemy(7, hp: 1_000_000, StatusFlags.InCombat);
+
+        var svc = BuildService([boss.Object], currentTarget: null);
+        var player = MakePlayer(flags: 0);
+
+        Assert.Equal(1, svc.CountEnemiesInRange(30f, player));
+        var target = svc.FindEnemy(EnemyTargetingStrategy.LowestHp, 30f, player);
+        Assert.NotNull(target);
+        Assert.Equal(7ul, target!.GameObjectId);
+    }
 }

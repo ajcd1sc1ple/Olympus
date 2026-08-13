@@ -41,8 +41,10 @@ public sealed class DamageModule : IPersephoneModule
     public unsafe void CollectCandidates(IPersephoneContext context, RotationScheduler scheduler, bool isMoving)
     {
         if (!context.InCombat)
-        {
             TryPushPrePullHardcast(context, scheduler);
+        // Hostile hard target → keep DPS even before server InCombat flips.
+        if (!context.InCombat && context.TargetingService.GetUserEnemyTarget() == null)
+        {
             context.Debug.DamageState = "Not in combat";
             return;
         }

@@ -37,7 +37,7 @@ public sealed class DamageModule : ICalliopeModule
 
     public void CollectCandidates(ICalliopeContext context, RotationScheduler scheduler, bool isMoving)
     {
-        if (!context.InCombat)
+        if (!context.InCombat && context.TargetingService.GetUserEnemyTarget() == null)
         {
             context.Debug.DamageState = "Not in combat";
             return;
