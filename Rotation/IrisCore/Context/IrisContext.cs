@@ -278,13 +278,18 @@ public sealed class IrisContext : IIrisContext
         HammerComboStep = hammerStep;
         IsInHammerCombo = inHammer || HasHammerTime;
 
-        // Calculate nearby enemies
+        // Calculate nearby enemies — Fire II splash is 25y targeted / 5y radius
         _currentTarget = targetingService.FindEnemy(
             configuration.Targeting.EnemyStrategy,
             FFXIVConstants.CasterTargetingRange,
             player);
-        NearbyEnemyCount = CountNearbyEnemies(player, 5f);
-        ShouldUseAoe = PCTActions.ShouldUseAoe(NearbyEnemyCount, player.Level);
+        var aoeEnabled = configuration.Pictomancer.EnableAoERotation;
+        NearbyEnemyCount = aoeEnabled
+            ? targetingService.FindBestAoETarget(
+                PCTActions.Fire2InRed.Radius, PCTActions.Fire2InRed.Range, player).hitCount
+            : 0;
+        var aoeMin = configuration.Pictomancer.AoEMinTargets;
+        ShouldUseAoe = NearbyEnemyCount >= aoeMin && player.Level >= PCTActions.Fire2InRed.MinLevel;
 
         // Burst window check
         IsInBurstWindow = HasStarryMuse;
@@ -376,32 +381,6 @@ public sealed class IrisContext : IIrisContext
             hammerStep = 2;
             inHammer = true;
         }
-    }
-
-    private int CountNearbyEnemies(IPlayerCharacter player, float radius)
-    {
-        var count = 0;
-        var playerPos = player.Position;
-
-        foreach (var obj in ObjectTable)
-        {
-            if (obj is not IBattleNpc npc)
-                continue;
-
-            // Skip non-hostile NPCs
-            if (npc.SubKind != 5) // BattleNpcSubKind.Enemy
-                continue;
-
-            // Skip dead enemies
-            if (npc.CurrentHp == 0)
-                continue;
-
-            var distance = System.Numerics.Vector3.Distance(playerPos, npc.Position);
-            if (distance <= radius + 25f) // Add targeting range
-                count++;
-        }
-
-        return count;
     }
 
     private (float avgHpPercent, float lowestHpPercent, int injuredCount) CalculatePartyHealth(IPlayerCharacter player)

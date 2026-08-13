@@ -75,9 +75,13 @@ public sealed class DamageModule : ICirceModule
 
         var aoeEnabled = context.Configuration.RedMage.EnableAoERotation;
         var aoeThreshold = context.Configuration.RedMage.AoEMinTargets;
-        var rawEnemyCount = context.TargetingService.CountEnemiesInRange(5f, player);
+        // Impact / Verthunder II are 25y targeted splash (5y) — do not count at player 5y.
+        var rawEnemyCount = aoeEnabled
+            ? context.TargetingService.FindBestAoETarget(
+                RDMActions.Impact.Radius, RDMActions.Impact.Range, player).hitCount
+            : 0;
         context.Debug.NearbyEnemies = rawEnemyCount;
-        var enemyCount = aoeEnabled ? rawEnemyCount : 0;
+        var enemyCount = rawEnemyCount;
         var useAoe = enemyCount >= aoeThreshold;
         var level = player.Level;
 

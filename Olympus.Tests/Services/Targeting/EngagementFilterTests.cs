@@ -169,19 +169,35 @@ public sealed class EngagementFilterTests
     }
 
     [Fact]
-    public void PlayerOutOfCombat_HardTargetOnly_DoesNotPullAdjacentPack()
+    public void PlayerOutOfCombat_HardTargetInCombat_IncludesNearbyPackAdd()
     {
+        // Tank pulled one mob; sibling add often lags on InCombat. Within pack-cluster
+        // link range it must count for AoE — otherwise full packs stay on ST.
         var hardTarget = MakeEnemy(5, hp: 8_000, StatusFlags.InCombat, pos: new Vector3(1f, 0f, 0f));
         var adjacent = MakeEnemy(6, hp: 500, flags: 0, pos: new Vector3(2f, 0f, 0f));
 
         var svc = BuildService([hardTarget.Object, adjacent.Object], currentTarget: hardTarget.Object);
         var player = MakePlayer(flags: 0);
 
-        // Hard target is selectable via InCombat; adjacent pack member is not.
+        Assert.Equal(2, svc.CountEnemiesInRange(25f, player));
+        var (aoeTarget, hitCount) = svc.FindBestAoETarget(5f, 25f, player);
+        Assert.NotNull(aoeTarget);
+        Assert.Equal(2, hitCount);
+    }
+
+    [Fact]
+    public void PlayerOutOfCombat_HardTargetInCombat_DoesNotUnlockDistantPack()
+    {
+        var hardTarget = MakeEnemy(40, hp: 8_000, StatusFlags.InCombat, pos: new Vector3(0f, 0f, 0f));
+        var distant = MakeEnemy(41, hp: 500, flags: 0, pos: new Vector3(20f, 0f, 0f));
+
+        var svc = BuildService([hardTarget.Object, distant.Object], currentTarget: hardTarget.Object);
+        var player = MakePlayer(flags: 0);
+
         Assert.Equal(1, svc.CountEnemiesInRange(25f, player));
         var lowest = svc.FindEnemy(EnemyTargetingStrategy.LowestHp, 25f, player);
         Assert.NotNull(lowest);
-        Assert.Equal(5ul, lowest!.GameObjectId);
+        Assert.Equal(40ul, lowest!.GameObjectId);
     }
 
     [Fact]

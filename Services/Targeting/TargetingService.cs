@@ -31,6 +31,9 @@ public sealed class TargetingService : ITargetingService
     // Reusable work list for AoE target methods (all called from game thread)
     private readonly List<IBattleNpc> _aoeWorkList = new();
 
+    // Scratch for pack-cluster / sole-hostile bootstrap scan (must not share _aoeWorkList)
+    private readonly List<IBattleNpc> _bootstrapScratch = new(32);
+
     // Optional marker probe — null when not available (existing tests, no prod registration)
     private readonly IMarkerProbe? _markerProbe;
 
@@ -41,9 +44,10 @@ public sealed class TargetingService : ITargetingService
     // brief Tab-retarget gaps without stalling DPS (gaze still pauses after grace).
     private long? _noTargetSinceTickMs;
 
-    // Memo for OOC sole-hostile pull bootstrap (one object-table scan per tick).
-    private long _soleBootstrapTickMs = long.MinValue;
+    // Memo for OOC sole-hostile pull bootstrap / pack-cluster unlock (one scan per tick).
+    private long _bootstrapScanTickMs = long.MinValue;
     private ulong _soleBootstrapHostileId;
+    private readonly HashSet<ulong> _engagedPackClusterIds = new(16);
 
     // Tank job IDs: PLD=19, WAR=21, DRK=32, GNB=37
     private static readonly HashSet<uint> TankJobIds = [19, 21, 32, 37];
@@ -278,23 +282,21 @@ public sealed class TargetingService : ITargetingService
         if (_aoeWorkList.Count == 1)
             return (_aoeWorkList[0], 1);
 
-        // For each potential target, count how many enemies would be hit
-        var aoeRadiusSquared = aoeRadius * aoeRadius;
+        // For each potential target, count how many enemies would be hit.
+        // Inflate splash by the other enemy's hitbox so loose tank stacks still count.
         foreach (var potentialTarget in _aoeWorkList)
         {
             int hitCount = 1; // Always hits the target itself
 
-            // Count other enemies within AoE radius of this target
             foreach (var other in _aoeWorkList)
             {
                 if (other.EntityId == potentialTarget.EntityId)
                     continue;
 
+                var hitRadius = aoeRadius + other.HitboxRadius;
                 var distSquared = Vector3.DistanceSquared(potentialTarget.Position, other.Position);
-                if (distSquared <= aoeRadiusSquared)
-                {
+                if (distSquared <= hitRadius * hitRadius)
                     hitCount++;
-                }
             }
 
             if (hitCount > bestHitCount)
@@ -557,33 +559,43 @@ public sealed class TargetingService : ITargetingService
             && hardTarget.GameObjectId == enemy.GameObjectId;
         var playerInCombat = (player.StatusFlags & StatusFlags.InCombat) != 0;
         var enemyInCombat = (enemy.StatusFlags & StatusFlags.InCombat) != 0;
-        var soleId = GetSoleBootstrapHostileId(player);
-        var isSole = soleId != 0UL && soleId == enemy.GameObjectId;
+        EnsureBootstrapScan(player);
+        var isSole = _soleBootstrapHostileId != 0UL && _soleBootstrapHostileId == enemy.GameObjectId;
+        var inCluster = _engagedPackClusterIds.Contains(enemy.GameObjectId);
 
         return DamageEngagementDecision.IsSelectable(
             isHardTarget,
             playerInCombat,
             enemyInCombat,
-            isSole);
+            isSole,
+            inCluster);
     }
 
     /// <summary>
-    /// Scans once per tick for a single targetable hostile in pull-bootstrap range.
-    /// Does not touch the GetValidEnemies cache (avoids range/cache recursion).
+    /// One object-table scan per tick: sole-hostile bootstrap id + engaged pack cluster
+    /// (InCombat seeds + hard target, plus hostiles within PackClusterLinkYalms).
+    /// Does not touch the GetValidEnemies cache.
     /// </summary>
-    private ulong GetSoleBootstrapHostileId(IPlayerCharacter player)
+    private void EnsureBootstrapScan(IPlayerCharacter player)
     {
         var now = Environment.TickCount64;
-        if (_soleBootstrapTickMs == now)
-            return _soleBootstrapHostileId;
+        if (_bootstrapScanTickMs == now)
+            return;
 
-        _soleBootstrapTickMs = now;
+        _bootstrapScanTickMs = now;
         _soleBootstrapHostileId = 0UL;
+        _engagedPackClusterIds.Clear();
 
         var playerPos = player.Position;
         var maxRange = DamageEngagementDecision.PullBootstrapRangeYalms;
         var maxRangeYalms = (byte)Math.Ceiling(maxRange);
+        var linkSq = DamageEngagementDecision.PackClusterLinkYalms * DamageEngagementDecision.PackClusterLinkYalms;
+        var hardTargetId = _targetManager.Target is IBattleNpc ht ? ht.GameObjectId : 0UL;
+
+        // Pass 1: collect hostiles in bootstrap range; track sole id + InCombat/hard seeds.
+        _bootstrapScratch.Clear();
         ulong soleId = 0UL;
+        var hostileCount = 0;
 
         foreach (var obj in _objectTable)
         {
@@ -602,17 +614,46 @@ public sealed class TargetingService : ITargetingService
             if (Vector3.DistanceSquared(playerPos, npc.Position) > effectiveRange * effectiveRange)
                 continue;
 
-            if (soleId != 0UL)
-            {
-                _soleBootstrapHostileId = 0UL; // more than one — no bootstrap
-                return 0UL;
-            }
+            hostileCount++;
+            soleId = hostileCount == 1 ? npc.GameObjectId : 0UL;
+            _bootstrapScratch.Add(npc);
 
-            soleId = npc.GameObjectId;
+            var isHard = hardTargetId != 0UL && npc.GameObjectId == hardTargetId;
+            if (isHard || (npc.StatusFlags & StatusFlags.InCombat) != 0)
+                _engagedPackClusterIds.Add(npc.GameObjectId);
         }
 
-        _soleBootstrapHostileId = soleId;
-        return soleId;
+        _soleBootstrapHostileId = hostileCount == 1 ? soleId : 0UL;
+
+        // Pass 2: one-hop link — pack adds lagging InCombat near a seed.
+        if (_engagedPackClusterIds.Count == 0 || _bootstrapScratch.Count == 0)
+            return;
+
+        for (var i = 0; i < _bootstrapScratch.Count; i++)
+        {
+            var candidate = _bootstrapScratch[i];
+            if (_engagedPackClusterIds.Contains(candidate.GameObjectId))
+                continue;
+
+            for (var j = 0; j < _bootstrapScratch.Count; j++)
+            {
+                var seed = _bootstrapScratch[j];
+                if (!_engagedPackClusterIds.Contains(seed.GameObjectId))
+                    continue;
+
+                if (Vector3.DistanceSquared(candidate.Position, seed.Position) <= linkSq)
+                {
+                    _engagedPackClusterIds.Add(candidate.GameObjectId);
+                    break;
+                }
+            }
+        }
+    }
+
+    private ulong GetSoleBootstrapHostileId(IPlayerCharacter player)
+    {
+        EnsureBootstrapScan(player);
+        return _soleBootstrapHostileId;
     }
 
     private IBattleNpc? FindLowestHpEnemy(float maxRange, IPlayerCharacter player)

@@ -11,6 +11,13 @@ public static class DamageEngagementDecision
     public const float PullBootstrapRangeYalms = 30f;
 
     /// <summary>
+    /// Hostiles within this distance of an InCombat enemy (or the hard target) are treated
+    /// as part of the same pack for AoE counting — pack adds often lag on InCombat after pull.
+    /// Distant adjacent packs stay blocked.
+    /// </summary>
+    public const float PackClusterLinkYalms = 8f;
+
+    /// <summary>
     /// Whether <paramref name="enemy"/> may be selected for damage this frame.
     /// </summary>
     /// <param name="isHardTarget">Player's current hard target.</param>
@@ -19,13 +26,17 @@ public static class DamageEngagementDecision
     /// <param name="isSoleHostileInBootstrapRange">
     /// True when this enemy is the only targetable hostile within
     /// <see cref="PullBootstrapRangeYalms"/> — boss arena before either InCombat flag flips.
-    /// Multi-mob trash packs stay blocked until something is engaged.
+    /// </param>
+    /// <param name="isInEngagedPackCluster">
+    /// True when this enemy is within <see cref="PackClusterLinkYalms"/> of an InCombat
+    /// hostile or the hard target (lagging pack adds after a pull).
     /// </param>
     public static bool IsSelectable(
         bool isHardTarget,
         bool playerInCombat,
         bool enemyInCombat,
-        bool isSoleHostileInBootstrapRange)
+        bool isSoleHostileInBootstrapRange,
+        bool isInEngagedPackCluster = false)
     {
         if (isHardTarget)
             return true;
@@ -34,6 +45,9 @@ public static class DamageEngagementDecision
             return true;
 
         if (enemyInCombat)
+            return true;
+
+        if (isInEngagedPackCluster)
             return true;
 
         return isSoleHostileInBootstrapRange;
