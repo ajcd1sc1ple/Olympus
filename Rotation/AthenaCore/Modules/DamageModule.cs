@@ -67,7 +67,7 @@ public sealed class DamageModule : BaseDamageModule<IAthenaContext>, IAthenaModu
         TryPushBanefulImpaction(context, scheduler);
         TryPushEnergyDrain(context, scheduler);
         TryPushAetherflow(context, scheduler);
-        TryPushDoT(context, scheduler);
+        TryPushDoT(context, scheduler, isMoving);
         TryPushAoEDamage(context, scheduler);
         if (!isMoving) TryPushSingleTargetDamage(context, scheduler, isMoving);
         if (isMoving) TryPushRuinII(context, scheduler);
@@ -262,20 +262,28 @@ public sealed class DamageModule : BaseDamageModule<IAthenaContext>, IAthenaModu
             });
     }
 
-    private void TryPushDoT(IAthenaContext context, RotationScheduler scheduler)
+    private void TryPushDoT(IAthenaContext context, RotationScheduler scheduler, bool isMoving)
     {
         if (!IsDoTEnabled(context)) return;
 
         var dotAction = GetDoTAction(context);
         if (dotAction == null) return;
 
+        var aoePreferred = false;
         if (IsAoEDamageEnabled(context))
         {
             var aoeAction = GetAoEDamageAction(context);
             if (aoeAction != null)
             {
-                var enemyCount = context.TargetingService.CountEnemiesInRange(aoeAction.Radius, context.Player);
-                if (enemyCount >= AoEMinTargets(context)) { SetDpsState(context, $"DoT: skipped ({enemyCount} enemies)"); return; }
+                var enemyCount = CountEnemiesForAoE(context, aoeAction);
+                if (enemyCount >= AoEMinTargets(context))
+                {
+                    // Stationary in a pack: Art of War wins. Moving: Art of War is instant, but
+                    // if the pack is outside its 5y radius the cast AoE path never fires — keep
+                    // Bio as movement filler (Ruin II is also pushed separately).
+                    if (!isMoving) { SetDpsState(context, $"DoT: skipped ({enemyCount} enemies)"); return; }
+                    aoePreferred = true;
+                }
             }
         }
 
@@ -290,7 +298,7 @@ public sealed class DamageModule : BaseDamageModule<IAthenaContext>, IAthenaModu
         var capturedAction = dotAction;
         var behavior = new AbilityBehavior { Action = dotAction };
 
-        scheduler.PushGcd(behavior, target.GameObjectId, priority: 310,
+        scheduler.PushGcd(behavior, target.GameObjectId, priority: aoePreferred ? 315 : 310,
             onDispatched: _ =>
             {
                 SetPlannedAction(context, capturedAction.Name);
@@ -307,7 +315,7 @@ public sealed class DamageModule : BaseDamageModule<IAthenaContext>, IAthenaModu
 
         // Healers cast AoE damage through predicted mechanics.
 
-        var enemyCount = context.TargetingService.CountEnemiesInRange(aoeAction.Radius, context.Player);
+        var enemyCount = CountEnemiesForAoE(context, aoeAction);
         SetAoEDpsEnemyCount(context, enemyCount);
         if (enemyCount < AoEMinTargets(context)) { SetAoEDpsState(context, $"{enemyCount} < {AoEMinTargets(context)} min"); return; }
 

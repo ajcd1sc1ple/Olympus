@@ -185,12 +185,9 @@ public sealed class TargetingService : ITargetingService
             return 0;
 
         int count = 0;
-        var currentTargetId = _targetManager.Target is IBattleNpc ? _targetManager.Target.GameObjectId : 0UL;
         foreach (var enemy in GetValidEnemies(radius, player))
         {
-            // Only count enemies in combat or explicitly targeted — avoids counting
-            // non-engaged targets like unattacked dummies or non-pulled packs
-            if ((enemy.StatusFlags & StatusFlags.InCombat) == 0 && enemy.GameObjectId != currentTargetId)
+            if (!IsEnemySelectableForDamage(enemy, player))
                 continue;
             count++;
         }
@@ -214,10 +211,13 @@ public sealed class TargetingService : ITargetingService
         IBattleNpc? bestTarget = null;
         int bestHitCount = 0;
 
-        // Collect all valid enemies in reusable work list
+        // Collect selectable enemies only — same engagement gate as Count/Find*
+        // so AoE centering cannot disagree with AoE threshold / ST targeting.
         _aoeWorkList.Clear();
         foreach (var enemy in GetValidEnemies(maxRange, player))
         {
+            if (!IsEnemySelectableForDamage(enemy, player))
+                continue;
             _aoeWorkList.Add(enemy);
         }
 
@@ -473,13 +473,12 @@ public sealed class TargetingService : ITargetingService
     private IBattleNpc? FindFirstAttackMarkedEnemy(float maxRange, IPlayerCharacter player)
     {
         var attackIds = _markerProbe!.GetAttackMarkTargets();
-        var currentTargetId = _targetManager.Target is IBattleNpc ? _targetManager.Target.GameObjectId : 0UL;
 
-        // Collect valid in-combat enemies into the reusable work list (cache hit = fast)
+        // Collect selectable enemies into the reusable work list (cache hit = fast)
         _aoeWorkList.Clear();
         foreach (var e in GetValidEnemies(maxRange, player))
         {
-            if ((e.StatusFlags & StatusFlags.InCombat) != 0 || e.GameObjectId == currentTargetId)
+            if (IsEnemySelectableForDamage(e, player))
                 _aoeWorkList.Add(e);
         }
 
@@ -495,17 +494,35 @@ public sealed class TargetingService : ITargetingService
         return null;
     }
 
+    /// <summary>
+    /// Shared engagement gate for damage targeting (Count / Find* / AoE best-target).
+    /// Always allows the hard target (dummies, intentional pulls). While the player is
+    /// in combat, every valid hostile is selectable — pack adds often lag on
+    /// <see cref="StatusFlags.InCombat"/> after a pull, and filtering them out caused
+    /// ST/AoE to disagree (or find nothing) when multiple enemies were present.
+    /// Out of combat, only enemies already flagged InCombat are selectable so adjacent
+    /// unpulled packs are not touched.
+    /// </summary>
+    private bool IsEnemySelectableForDamage(IBattleNpc enemy, IPlayerCharacter player)
+    {
+        if (_targetManager.Target is IBattleNpc hardTarget
+            && hardTarget.GameObjectId == enemy.GameObjectId)
+            return true;
+
+        if ((player.StatusFlags & StatusFlags.InCombat) != 0)
+            return true;
+
+        return (enemy.StatusFlags & StatusFlags.InCombat) != 0;
+    }
+
     private IBattleNpc? FindLowestHpEnemy(float maxRange, IPlayerCharacter player)
     {
         IBattleNpc? best = null;
         uint lowestHp = uint.MaxValue;
-        var currentTargetId = _targetManager.Target is IBattleNpc ? _targetManager.Target.GameObjectId : 0UL;
 
         foreach (var enemy in GetValidEnemies(maxRange, player))
         {
-            // Only consider enemies in combat or explicitly targeted by the player —
-            // avoids targeting non-engaged enemies like unattacked dummies or non-pulled packs
-            if ((enemy.StatusFlags & StatusFlags.InCombat) == 0 && enemy.GameObjectId != currentTargetId)
+            if (!IsEnemySelectableForDamage(enemy, player))
                 continue;
 
             if (enemy.CurrentHp < lowestHp)
@@ -522,11 +539,10 @@ public sealed class TargetingService : ITargetingService
     {
         IBattleNpc? best = null;
         uint highestHp = 0;
-        var currentTargetId = _targetManager.Target is IBattleNpc ? _targetManager.Target.GameObjectId : 0UL;
 
         foreach (var enemy in GetValidEnemies(maxRange, player))
         {
-            if ((enemy.StatusFlags & StatusFlags.InCombat) == 0 && enemy.GameObjectId != currentTargetId)
+            if (!IsEnemySelectableForDamage(enemy, player))
                 continue;
 
             if (enemy.CurrentHp > highestHp)
@@ -544,11 +560,10 @@ public sealed class TargetingService : ITargetingService
         IBattleNpc? best = null;
         float nearestDist = float.MaxValue;
         var playerPos = player.Position;
-        var currentTargetId = _targetManager.Target is IBattleNpc ? _targetManager.Target.GameObjectId : 0UL;
 
         foreach (var enemy in GetValidEnemies(maxRange, player))
         {
-            if ((enemy.StatusFlags & StatusFlags.InCombat) == 0 && enemy.GameObjectId != currentTargetId)
+            if (!IsEnemySelectableForDamage(enemy, player))
                 continue;
 
             var dist = Vector3.DistanceSquared(playerPos, enemy.Position);
@@ -818,7 +833,11 @@ public sealed class TargetingService : ITargetingService
         var candidateRange = MathF.Max(radius, maxRange);
         _aoeWorkList.Clear();
         foreach (var e in GetValidEnemies(candidateRange, player))
+        {
+            if (!IsEnemySelectableForDamage(e, player))
+                continue;
             _aoeWorkList.Add(e);
+        }
 
         if (_aoeWorkList.Count == 0) return (null, 0, 0f);
         if (_aoeWorkList.Count == 1)
@@ -877,7 +896,11 @@ public sealed class TargetingService : ITargetingService
         var candidateRange = MathF.Max(length, maxRange);
         _aoeWorkList.Clear();
         foreach (var e in GetValidEnemies(candidateRange, player))
+        {
+            if (!IsEnemySelectableForDamage(e, player))
+                continue;
             _aoeWorkList.Add(e);
+        }
 
         if (_aoeWorkList.Count == 0) return (null, 0, 0f);
         if (_aoeWorkList.Count == 1)

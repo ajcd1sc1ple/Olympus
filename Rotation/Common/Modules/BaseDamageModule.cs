@@ -213,6 +213,22 @@ public abstract class BaseDamageModule<TContext> : IHealerRotationModule<TContex
     #region Protected Implementation Methods
 
     /// <summary>
+    /// Counts enemies relevant to an AoE GCD threshold. Self-centered AoEs use a
+    /// player-radius count; targeted AoEs (Gravity, Misery, etc.) use the best
+    /// splash-center hit count within cast range so packs at range are not
+    /// under-counted as zero.
+    /// </summary>
+    protected static int CountEnemiesForAoE(TContext context, ActionDefinition aoeAction)
+    {
+        if (aoeAction.TargetType == ActionTargetType.Self)
+            return context.TargetingService.CountEnemiesInRange(aoeAction.Radius, context.Player);
+
+        var (_, hitCount) = context.TargetingService.FindBestAoETarget(
+            aoeAction.Radius, aoeAction.Range, context.Player);
+        return hitCount;
+    }
+
+    /// <summary>
     /// Attempts to apply or refresh DoT on an enemy.
     /// </summary>
     protected virtual bool TryDoT(TContext context)
@@ -231,7 +247,7 @@ public abstract class BaseDamageModule<TContext> : IHealerRotationModule<TContex
             var aoeAction = GetAoEDamageAction(context);
             if (aoeAction != null)
             {
-                var enemyCount = context.TargetingService.CountEnemiesInRange(aoeAction.Radius, context.Player);
+                var enemyCount = CountEnemiesForAoE(context, aoeAction);
                 if (enemyCount >= AoEMinTargets(context))
                 {
                     SetDpsState(context, $"DoT: skipped ({enemyCount} enemies, AoE preferred)");
@@ -301,7 +317,7 @@ public abstract class BaseDamageModule<TContext> : IHealerRotationModule<TContex
             return false;
         }
 
-        var enemyCount = context.TargetingService.CountEnemiesInRange(aoeAction.Radius, context.Player);
+        var enemyCount = CountEnemiesForAoE(context, aoeAction);
         SetAoEDpsEnemyCount(context, enemyCount);
 
         var minTargets = AoEMinTargets(context);

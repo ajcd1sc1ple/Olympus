@@ -280,7 +280,7 @@ public sealed class DamageModule : BaseDamageModule<IApolloContext>, IApolloModu
             var aoeAction = GetAoEDamageAction(context);
             if (aoeAction != null)
             {
-                var enemyCount = context.TargetingService.CountEnemiesInRange(aoeAction.Radius, context.Player);
+                var enemyCount = CountEnemiesForAoE(context, aoeAction);
                 if (enemyCount >= AoEMinTargets(context))
                 {
                     // Stationary in a pack: Holy wins, skip the DoT entirely. Moving in a pack:
@@ -329,7 +329,7 @@ public sealed class DamageModule : BaseDamageModule<IApolloContext>, IApolloModu
 
         // Healers cast AoE damage through predicted mechanics.
 
-        var enemyCount = context.TargetingService.CountEnemiesInRange(aoeAction.Radius, context.Player);
+        var enemyCount = CountEnemiesForAoE(context, aoeAction);
         SetAoEDpsEnemyCount(context, enemyCount);
         if (enemyCount < AoEMinTargets(context)) { SetAoEDpsState(context, $"{enemyCount} < {AoEMinTargets(context)} min"); return; }
 

@@ -50,7 +50,7 @@ public sealed class DamageModule : BaseDamageModule<IAstraeaContext>, IAstraeaMo
 
         TryPushOracle(context, scheduler);
         TryPushLordOfCrowns(context, scheduler);
-        TryPushDoT(context, scheduler);
+        TryPushDoT(context, scheduler, isMoving);
         TryPushAoEDamage(context, scheduler);
         TryPushSingleTargetDamage(context, scheduler, isMoving);
     }
@@ -105,20 +105,28 @@ public sealed class DamageModule : BaseDamageModule<IAstraeaContext>, IAstraeaMo
             });
     }
 
-    private void TryPushDoT(IAstraeaContext context, RotationScheduler scheduler)
+    private void TryPushDoT(IAstraeaContext context, RotationScheduler scheduler, bool isMoving)
     {
         if (!IsDoTEnabled(context)) return;
 
         var dotAction = GetDoTAction(context);
         if (dotAction == null) return;
 
+        var aoePreferred = false;
         if (IsAoEDamageEnabled(context))
         {
             var aoeAction = GetAoEDamageAction(context);
             if (aoeAction != null)
             {
-                var enemyCount = context.TargetingService.CountEnemiesInRange(aoeAction.Radius, context.Player);
-                if (enemyCount >= AoEMinTargets(context)) { SetDpsState(context, $"DoT: skipped ({enemyCount} enemies)"); return; }
+                var enemyCount = CountEnemiesForAoE(context, aoeAction);
+                if (enemyCount >= AoEMinTargets(context))
+                {
+                    // Stationary in a pack: Gravity wins. Moving in a pack: Gravity's cast
+                    // cannot start (and ST Malefic is also gated without Lightspeed), so the
+                    // instant Combust is the only damage GCD that can land — keep it.
+                    if (!isMoving) { SetDpsState(context, $"DoT: skipped ({enemyCount} enemies)"); return; }
+                    aoePreferred = true;
+                }
             }
         }
 
@@ -133,7 +141,9 @@ public sealed class DamageModule : BaseDamageModule<IAstraeaContext>, IAstraeaMo
         var capturedAction = dotAction;
         var behavior = new AbilityBehavior { Action = dotAction };
 
-        scheduler.PushGcd(behavior, target.GameObjectId, priority: 310,
+        // 315: moving-in-a-pack filler behind Lord/Oracle oGCDs but ahead of Gravity (320),
+        // which cannot be cast while moving.
+        scheduler.PushGcd(behavior, target.GameObjectId, priority: aoePreferred ? 315 : 310,
             onDispatched: _ =>
             {
                 SetPlannedAction(context, capturedAction.Name);
@@ -150,7 +160,7 @@ public sealed class DamageModule : BaseDamageModule<IAstraeaContext>, IAstraeaMo
 
         // Healers cast AoE damage through predicted mechanics.
 
-        var enemyCount = context.TargetingService.CountEnemiesInRange(aoeAction.Radius, context.Player);
+        var enemyCount = CountEnemiesForAoE(context, aoeAction);
         SetAoEDpsEnemyCount(context, enemyCount);
         if (enemyCount < AoEMinTargets(context)) { SetAoEDpsState(context, $"{enemyCount} < {AoEMinTargets(context)} min"); return; }
 
