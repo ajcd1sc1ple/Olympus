@@ -3,44 +3,27 @@ using Olympus.Timeline;
 namespace Olympus.Rotation.Common.Helpers;
 
 /// <summary>
-/// Shared decision logic for blocking cast-time damage GCDs when a raidwide
-/// or tank buster is predicted to hit before the cast would complete.
-/// Any rotation (healer, caster DPS, physical ranged, tank) can call
-/// <see cref="ShouldBlock"/> before executing a cast-time GCD.
+/// Shared decision logic for optionally blocking cast-time damage GCDs when a
+/// raidwide or tank buster is predicted to hit before the cast would complete.
 ///
-/// Instant GCDs (castTime &lt;= 0) always return false -- wrapping every
-/// GCD call site is safe.
+/// Casting-through is the default for all roles: holding hardcasts without a
+/// reliable stationary instant filler created empty GCD windows around every
+/// timeline hit (healers, casters, and tanks). Tank-buster mitigations are
+/// unrelated — they still fire from <c>NextTankBuster</c> / timeline helpers.
 ///
-/// Caveat: <c>castTime</c> must reflect the effective cast time considering
-/// current buffs. For buff-instant cases (BLM Firestarter, PLD Divine Might,
-/// Swiftcast, etc.) pass <c>0</c> or skip the gate in the calling rotation.
-/// Passing the base action cast time when a buff has made the cast instant
-/// produces a false-positive block.
+/// Instant GCDs (castTime &lt;= 0) always return false.
 /// </summary>
 public static class MechanicCastGate
 {
+    /// <summary>
+    /// Returns whether a cast-time damage GCD should be held for an imminent mechanic.
+    /// Always false: cast-through is required for continuous GCD uptime.
+    /// The timeline toggle is retained for config compatibility but no longer blocks.
+    /// </summary>
     public static bool ShouldBlock(IRotationContext context, float castTime)
     {
-        if (castTime <= 0f) return false;
-
-        var cfg = context.Configuration.Timeline;
-        if (!cfg.EnableMechanicAwareCasting) return false;
-        if (!cfg.EnableTimelinePredictions) return false;
-
-        var timeline = context.TimelineService;
-        if (timeline == null || !timeline.IsActive) return false;
-        if (timeline.Confidence < cfg.TimelineConfidenceThreshold) return false;
-
-        var deadline = castTime + 0.5f;
-
-        var raidwide = timeline.NextRaidwide;
-        if (raidwide.HasValue && raidwide.Value.SecondsUntil > 0f && raidwide.Value.SecondsUntil <= deadline)
-            return true;
-
-        var tankbuster = timeline.NextTankBuster;
-        if (tankbuster.HasValue && tankbuster.Value.SecondsUntil > 0f && tankbuster.Value.SecondsUntil <= deadline)
-            return true;
-
+        _ = context;
+        _ = castTime;
         return false;
     }
 
