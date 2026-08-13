@@ -2,7 +2,9 @@ using System;
 using System.Linq;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Plugin.Services;
 using Olympus.Config;
+using Olympus.Ipc;
 using Olympus.Localization;
 using Olympus.Services.Targeting;
 
@@ -15,6 +17,8 @@ public sealed class GeneralSection
 {
     private readonly Configuration config;
     private readonly Action save;
+    private readonly IOrbwalkerIpc? orbwalkerIpc;
+    private readonly IObjectTable? objectTable;
 
     private string[] GetStrategyNames() =>
     [
@@ -49,10 +53,12 @@ public sealed class GeneralSection
         Loc.T(LocalizedStrings.RoleActions.SurecastModeAuto, "Use on Cooldown")
     ];
 
-    public GeneralSection(Configuration config, Action save)
+    public GeneralSection(Configuration config, Action save, IOrbwalkerIpc? orbwalkerIpc = null, IObjectTable? objectTable = null)
     {
         this.config = config;
         this.save = save;
+        this.orbwalkerIpc = orbwalkerIpc;
+        this.objectTable = objectTable;
     }
 
     public void DrawGeneral()
@@ -106,13 +112,14 @@ public sealed class GeneralSection
 
         ConfigUIHelpers.Spacing();
 
-        // Safety toggles — protect against gaze mechanics and unintentional target retargeting.
+        // Safety toggles — PauseWhenNoTarget is retained in config but no longer stalls DPS
+        // (dual-boss / Tab freezes). Engagement filtering still blocks unpulled packs.
         ConfigUIHelpers.Toggle(
-            Loc.T(LocalizedStrings.Targeting.PauseWhenNoTarget, "Pause damage when no target"),
+            Loc.T(LocalizedStrings.Targeting.PauseWhenNoTarget, "Pause damage when no target (unused)"),
             () => this.config.Targeting.PauseWhenNoTarget,
             v => this.config.Targeting.PauseWhenNoTarget = v,
             Loc.T(LocalizedStrings.Targeting.PauseWhenNoTargetDesc,
-                "Stop attacking when you drop your target. Lets you look away for gaze mechanics or disengage without Olympus picking a new enemy."),
+                "No longer used. Olympus keeps DPS on selectable enemies even with no hard target (Anyder shark swaps, Tab retarget). Turned off to stop mid-fight stalls."),
             this.save);
 
         ConfigUIHelpers.Toggle(
@@ -144,7 +151,7 @@ public sealed class GeneralSection
             () => this.config.Targeting.StrictCurrentTargetStrategy,
             v => this.config.Targeting.StrictCurrentTargetStrategy = v,
             Loc.T(LocalizedStrings.Targeting.StrictCurrentTargetStrategyDesc,
-                "When using Current Target or Focus Target strategy, never fall back to another enemy if yours is gone."),
+                "When using Current Target or Focus Target strategy, do not keep a new enemy after you drop yours (brief Tab switches still fall back so DPS does not stall)."),
             this.save);
 
         ConfigUIHelpers.Toggle(
@@ -189,7 +196,7 @@ public sealed class GeneralSection
             this.config.MovementTolerance = moveTolerance / 1000f;
             this.save();
         }
-        ImGui.TextDisabled(Loc.T(LocalizedStrings.Targeting.MovementToleranceDesc, "Delay after stopping before casting. Lower = faster, higher = safer."));
+        ImGui.TextDisabled(Loc.T(LocalizedStrings.Targeting.MovementToleranceDesc, "Delay after stopping before casting. Lower = faster, higher = safer. BossMod follow crawl is filtered by speed, not just this delay."));
 
         ConfigUIHelpers.EndIndent();
     }
@@ -211,14 +218,82 @@ public sealed class GeneralSection
             ConfigUIHelpers.Spacing();
 
             ConfigUIHelpers.Toggle(
+                Loc.T(LocalizedStrings.General.EnableAutoAttackUntilDead, "Keep auto-attack until target dies"),
+                () => this.config.EnableAutoAttackUntilDead,
+                v => this.config.EnableAutoAttackUntilDead = v,
+                Loc.T(LocalizedStrings.General.EnableAutoAttackUntilDeadDesc,
+                    "Starts the rotation when you auto-attack a living enemy, keeps AA on until that enemy dies, then turns AA off. If BossMod Auto Autos still turns AA off early, disable that tweak in BossMod Action Tweaks."),
+                this.save);
+
+            ConfigUIHelpers.Spacing();
+
+            ConfigUIHelpers.Toggle(
                 Loc.T(LocalizedStrings.General.EnablePingCompensation, "Ping compensation (opt-in)"),
                 () => this.config.EnablePingCompensation,
                 v => this.config.EnablePingCompensation = v,
                 Loc.T(LocalizedStrings.General.EnablePingCompensationDesc, "Adds your measured network delay to the weave-window cost calculation, reducing GCD clipping on high-latency connections. Leave off unless you notice clipped GCDs."),
                 this.save);
 
+            ConfigUIHelpers.Spacing();
+
+            DrawOrbwalkerIntegration();
+
+            ConfigUIHelpers.Spacing();
+
+            ConfigUIHelpers.Toggle(
+                Loc.T(LocalizedStrings.General.EnablePostCancelHardcastHold, "Hold hardcasts after cancel"),
+                () => this.config.EnablePostCancelHardcastHold,
+                v => this.config.EnablePostCancelHardcastHold = v,
+                Loc.T(LocalizedStrings.General.EnablePostCancelHardcastHoldDesc,
+                    "If a cast-time GCD is cancelled while moving, briefly stop retrying hardcasts so you do not get a recast stutter loop."),
+                this.save);
+
             ConfigUIHelpers.EndIndent();
         }
+    }
+
+    private void DrawOrbwalkerIntegration()
+    {
+        ConfigUIHelpers.Toggle(
+            Loc.T(LocalizedStrings.General.EnableOrbwalkerIntegration, "Enable Orbwalker integration"),
+            () => this.config.EnableOrbwalkerIntegration,
+            v => this.config.EnableOrbwalkerIntegration = v,
+            Loc.T(LocalizedStrings.General.EnableOrbwalkerIntegrationDesc,
+                "When Orbwalker locks movement for your job (Buffer / combat force-stop), hardcasts are allowed; while still pathing unlocked, instant fillers keep casting."),
+            this.save);
+
+        ImGui.TextDisabled(GetOrbwalkerStatusText());
+        ImGui.TextDisabled(Loc.T(LocalizedStrings.General.OrbwalkerHelp,
+            "Install from puni.sh/plugin/Orbwalker. Enable the plugin and your job in /orbwalker. Enable Buffer Initial Cast and combat force-stop / slidecast so Orbwalker locks before each hardcast."));
+    }
+
+    private string GetOrbwalkerStatusText()
+    {
+        if (!this.config.EnableOrbwalkerIntegration)
+            return Loc.T(LocalizedStrings.General.OrbwalkerStatusDisabled, "Status: Integration off");
+
+        if (this.orbwalkerIpc is null || !this.orbwalkerIpc.Available)
+            return Loc.T(LocalizedStrings.General.OrbwalkerStatusNotInstalled, "Status: Orbwalker not installed / not loaded");
+
+        if (!this.orbwalkerIpc.PluginEnabled())
+            return Loc.T(LocalizedStrings.General.OrbwalkerStatusPluginOff, "Status: Orbwalker plugin disabled");
+
+        var jobId = this.objectTable?.LocalPlayer?.ClassJob.RowId ?? 0;
+        if (jobId != 0 && this.orbwalkerIpc.IsActiveForJob(jobId))
+        {
+            if (!this.orbwalkerIpc.BufferEnabled())
+            {
+                return Loc.T(LocalizedStrings.General.OrbwalkerStatusActiveNoBuffer,
+                    "Status: Active for current job (enable Buffer Initial Cast in Orbwalker)");
+            }
+
+            return this.orbwalkerIpc.OrbwalkingMode()
+                ? Loc.T(LocalizedStrings.General.OrbwalkerStatusActive, "Status: Active for current job")
+                : Loc.T(LocalizedStrings.General.OrbwalkerStatusActiveNoForceStop,
+                    "Status: Active for current job (enable combat force-stop / slidecast in Orbwalker for best results)");
+        }
+
+        return Loc.T(LocalizedStrings.General.OrbwalkerStatusJobOff, "Status: Current job not enabled in Orbwalker");
     }
 
     private void DrawWindowBehaviorSection()

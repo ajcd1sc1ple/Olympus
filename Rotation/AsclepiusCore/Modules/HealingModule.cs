@@ -49,7 +49,7 @@ public sealed class HealingModule : IAsclepiusModule
     {
         context.HealingCoordination.Clear();
         TryPrePullEukrasianShield(context, scheduler);   // NEW
-        if (!context.InCombat) return;
+        // Heal regardless of combat/target — only the heal master toggle stops healing.
         if (!context.Configuration.EnableHealing) return;
 
         foreach (var handler in _handlers)

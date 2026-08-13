@@ -156,13 +156,16 @@ public class DamageModuleTests
         var player = MockBuilders.CreateMockPlayerCharacter(level: playerLevel);
 
         var targeting = new Mock<ITargetingService>();
-        targeting.Setup(t => t.IsDamageTargetingPaused()).Returns(false);
+        targeting.Setup(t => t.IsDamageTargetingPaused(It.IsAny<IPlayerCharacter?>())).Returns(false);
+
+        var partyHelper = MockBuilders.CreateMockPartyHelper();
 
         var ctx = new Mock<IApolloContext>();
         ctx.Setup(x => x.InCombat).Returns(true);
         ctx.Setup(x => x.Configuration).Returns(config);
         ctx.Setup(x => x.Player).Returns(player.Object);
         ctx.Setup(x => x.TargetingService).Returns(targeting.Object);
+        ctx.Setup(x => x.PartyHelper).Returns(partyHelper.Object);
         ctx.Setup(x => x.Debug).Returns(new DebugState());
         ctx.Setup(x => x.LilyCount).Returns(0);
         ctx.Setup(x => x.BloodLilyCount).Returns(bloodLilyCount);

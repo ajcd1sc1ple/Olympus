@@ -36,11 +36,11 @@ public sealed class DamageModule : BaseDamageModule<IAstraeaContext>, IAstraeaMo
     public void CollectCandidates(IAstraeaContext context, RotationScheduler scheduler, bool isMoving)
     {
         if (!context.InCombat)
-        {
             TryPushPrePullHardcast(context, scheduler);
+        // Hostile hard target → keep DPS even before server InCombat flips.
+        if (!context.InCombat && context.TargetingService.GetUserEnemyTarget() == null)
             return;
-        }
-        if (context.TargetingService.IsDamageTargetingPaused()) { SetDpsState(context, "Paused (no target)"); return; }
+        if (context.TargetingService.IsDamageTargetingPaused(context.Player)) { SetDpsState(context, "Paused (no target)"); return; }
         if (context.Configuration.Targeting.SuppressDamageOnForcedMovement
             && PlayerSafetyHelper.IsForcedMovementActive(context.Player))
         {
@@ -49,8 +49,17 @@ public sealed class DamageModule : BaseDamageModule<IAstraeaContext>, IAstraeaMo
         }
 
         TryPushOracle(context, scheduler);
+
+        var (_, lowestHp, _) = context.PartyHelper.CalculatePartyHealthMetrics(context.Player);
+        if (HealingUrgency.ShouldSuppressDamageGcds(
+                context.Configuration.EnableHealing, lowestHp, context.Configuration.Healing))
+        {
+            SetDpsState(context, "Holding: GCD emergency heal");
+            return;
+        }
+
         TryPushLordOfCrowns(context, scheduler);
-        TryPushDoT(context, scheduler);
+        TryPushDoT(context, scheduler, isMoving);
         TryPushAoEDamage(context, scheduler);
         TryPushSingleTargetDamage(context, scheduler, isMoving);
     }
@@ -105,25 +114,32 @@ public sealed class DamageModule : BaseDamageModule<IAstraeaContext>, IAstraeaMo
             });
     }
 
-    private void TryPushDoT(IAstraeaContext context, RotationScheduler scheduler)
+    private void TryPushDoT(IAstraeaContext context, RotationScheduler scheduler, bool isMoving)
     {
         if (!IsDoTEnabled(context)) return;
 
         var dotAction = GetDoTAction(context);
         if (dotAction == null) return;
 
+        var aoePreferred = false;
         if (IsAoEDamageEnabled(context))
         {
             var aoeAction = GetAoEDamageAction(context);
             if (aoeAction != null)
             {
-                var enemyCount = context.TargetingService.CountEnemiesInRange(aoeAction.Radius, context.Player);
-                if (enemyCount >= AoEMinTargets(context)) { SetDpsState(context, $"DoT: skipped ({enemyCount} enemies)"); return; }
+                var enemyCount = CountEnemiesForAoE(context, aoeAction);
+                if (enemyCount >= AoEMinTargets(context))
+                {
+                    // Stationary in a pack: Gravity wins. Moving in a pack: Gravity's cast
+                    // cannot start (and ST Malefic is also gated without Lightspeed), so the
+                    // instant Combust is the only damage GCD that can land — keep it.
+                    if (!isMoving) { SetDpsState(context, $"DoT: skipped ({enemyCount} enemies)"); return; }
+                    aoePreferred = true;
+                }
             }
         }
 
-        var dotCastTime = context.HasSwiftcast ? 0f : dotAction.CastTime;
-        if (MechanicCastGate.ShouldBlock(context, dotCastTime)) { SetDpsState(context, "DoT: mechanic imminent"); return; }
+        // Healers cast DoT through predicted mechanics (no idle GCD holes).
 
         var dotStatusId = GetDoTStatusId(context);
         if (dotStatusId == 0) return;
@@ -134,7 +150,9 @@ public sealed class DamageModule : BaseDamageModule<IAstraeaContext>, IAstraeaMo
         var capturedAction = dotAction;
         var behavior = new AbilityBehavior { Action = dotAction };
 
-        scheduler.PushGcd(behavior, target.GameObjectId, priority: 310,
+        // 315: moving-in-a-pack filler behind Lord/Oracle oGCDs but ahead of Gravity (320),
+        // which cannot be cast while moving.
+        scheduler.PushGcd(behavior, target.GameObjectId, priority: aoePreferred ? 315 : 310,
             onDispatched: _ =>
             {
                 SetPlannedAction(context, capturedAction.Name);
@@ -149,10 +167,9 @@ public sealed class DamageModule : BaseDamageModule<IAstraeaContext>, IAstraeaMo
         var aoeAction = GetAoEDamageAction(context);
         if (aoeAction == null) return;
 
-        var aoeCastTime = context.HasSwiftcast ? 0f : aoeAction.CastTime;
-        if (MechanicCastGate.ShouldBlock(context, aoeCastTime)) { SetAoEDpsState(context, "Holding: mechanic imminent"); return; }
+        // Healers cast AoE damage through predicted mechanics.
 
-        var enemyCount = context.TargetingService.CountEnemiesInRange(aoeAction.Radius, context.Player);
+        var enemyCount = CountEnemiesForAoE(context, aoeAction);
         SetAoEDpsEnemyCount(context, enemyCount);
         if (enemyCount < AoEMinTargets(context)) { SetAoEDpsState(context, $"{enemyCount} < {AoEMinTargets(context)} min"); return; }
 
@@ -180,8 +197,7 @@ public sealed class DamageModule : BaseDamageModule<IAstraeaContext>, IAstraeaMo
         if (isMoving && !context.HasLightspeed) return;
 
         var action = GetSingleTargetAction(context, isMoving);
-        var stCastTime = context.HasSwiftcast || context.HasLightspeed ? 0f : action.CastTime;
-        if (MechanicCastGate.ShouldBlock(context, stCastTime)) { SetDpsState(context, "Holding: mechanic imminent"); return; }
+        // Healers cast ST damage through predicted mechanics; Lightspeed covers movement.
 
         var target = context.TargetingService.FindEnemy(
             context.Configuration.Targeting.EnemyStrategy, action.Range, context.Player);

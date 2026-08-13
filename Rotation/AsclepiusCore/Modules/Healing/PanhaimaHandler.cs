@@ -5,6 +5,7 @@ using Olympus.Rotation.ApolloCore.Helpers;
 using Olympus.Rotation.AsclepiusCore.Abilities;
 using Olympus.Rotation.AsclepiusCore.Context;
 using Olympus.Rotation.Common.Scheduling;
+using static Olympus.Rotation.Common.Scheduling.HealerSchedulerPriorities;
 using Olympus.Services.Training;
 
 namespace Olympus.Rotation.AsclepiusCore.Modules.Healing;
@@ -55,14 +56,20 @@ public sealed class PanhaimaHandler : IHealingHandler
 
         var raidwideImminent = TimelineHelper.IsRaidwideImminent(
             context.TimelineService, context.BossMechanicDetector, context.Configuration, out var raidwideSource);
+        if (!raidwideImminent)
+        {
+            raidwideImminent = TimelineHelper.IsAoEShieldPrepImminent(
+                context.TimelineService, context.BossMechanicDetector, context.Configuration, out raidwideSource);
+        }
 
         if (avgHp > config.PanhaimaThreshold && !raidwideImminent) { context.Debug.PanhaimaState = $"Avg HP {avgHp:P0}"; return; }
 
         var capturedAvgHp = avgHp;
         var capturedRaidwideImminent = raidwideImminent;
         var action = SGEActions.Panhaima;
+        var panhaimaPriority = Mitigation(raidwideImminent, reactivePriority: Priority);
 
-        scheduler.PushOgcd(AsclepiusAbilities.Panhaima, player.GameObjectId, priority: Priority,
+        scheduler.PushOgcd(AsclepiusAbilities.Panhaima, player.GameObjectId, priority: panhaimaPriority,
             onDispatched: _ =>
             {
                 context.Debug.PlannedAction = action.Name;

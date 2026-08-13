@@ -98,24 +98,62 @@ public sealed class KardiaModule : IAsclepiusModule
 
     private void TryPushEnsureKardiaOnTank(IAsclepiusContext context, RotationScheduler scheduler)
     {
+        var config = context.Configuration.Sage;
+        if (!config.KardiaSwapEnabled) return;
         if (!context.HasKardiaPlaced) return;
         if (!context.CanSwapKardia) return;
 
         var player = context.Player;
+        var currentTarget = FindKardiaTargetById(context, context.KardiaTargetId);
+        if (currentTarget == null) return;
+
+        var currentHp = currentTarget.MaxHp > 0
+            ? (float)currentTarget.CurrentHp / currentTarget.MaxHp
+            : 1f;
+
+        // Prefer swapping toward an urgently low non-current target.
+        var lowest = context.PartyHelper.FindLowestHpPartyMember(player);
+        if (lowest != null && lowest.GameObjectId != context.KardiaTargetId)
+        {
+            var newHp = lowest.MaxHp > 0 ? (float)lowest.CurrentHp / lowest.MaxHp : 1f;
+            if (context.KardiaManager.ShouldSwapKardia(
+                    currentHp, newHp, config.KardiaSwapThreshold, newTargetIsTank: false))
+            {
+                PushKardiaSwap(context, scheduler, lowest, "LowHP", $"Swap to low HP ({newHp:P0})");
+                return;
+            }
+        }
+
+        // Return Kardia to tank once the current (non-tank) target is healthy again.
         var tank = context.PartyHelper.FindTankInParty(player);
         if (tank == null) return;
         if (tank.GameObjectId == context.KardiaTargetId) return;
 
-        var capturedTank = tank;
+        var tankHp = tank.MaxHp > 0 ? (float)tank.CurrentHp / tank.MaxHp : 1f;
+        if (!context.KardiaManager.ShouldSwapKardia(
+                currentHp, tankHp, config.KardiaSwapThreshold, newTargetIsTank: true))
+            return;
+
+        PushKardiaSwap(context, scheduler, tank, "EnsureTank", "Kardia not on tank, moving back");
+    }
+
+    private static void PushKardiaSwap(
+        IAsclepiusContext context,
+        RotationScheduler scheduler,
+        IBattleChara target,
+        string reason,
+        string detail)
+    {
+        var capturedTarget = target;
         var action = SGEActions.Kardia;
 
-        scheduler.PushOgcd(AsclepiusAbilities.Kardia, tank.GameObjectId, priority: 0,
+        scheduler.PushOgcd(AsclepiusAbilities.Kardia, target.GameObjectId, priority: 0,
             onDispatched: _ =>
             {
-                context.KardiaManager.RecordSwap(capturedTank.GameObjectId);
+                context.KardiaManager.RecordSwap(capturedTarget.GameObjectId);
                 context.Debug.PlannedAction = action.Name;
-                context.Debug.PlanningState = "Kardia -> Tank";
-                context.LogKardiaDecision(capturedTank.Name?.TextValue ?? "Unknown", "EnsureTank", "Kardia not on tank, moving back");
+                context.Debug.PlanningState = $"Kardia -> {reason}";
+                context.LogKardiaDecision(capturedTarget.Name?.TextValue ?? "Unknown", reason, detail);
             });
     }
 

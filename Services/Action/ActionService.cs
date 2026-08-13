@@ -50,9 +50,17 @@ public sealed unsafe class ActionService : IActionService
     // Track oGCD usage per GCD cycle (allows up to 2 weaves)
     private int _ogcdsUsedThisCycle;
 
-    // Guard so modules can't spam UseAction every frame during the ~0.5s queue window.
-    // Set on successful submit while GcdRemaining > 0; cleared at true rollover (GcdRemaining == 0).
+    // Guard so modules can't spam UseAction every frame during the ~0.5s queue window
+    // or after a cancelled cast-time GCD while GCD is still Ready (cancel → recast loop).
     private bool _gcdSubmittedThisCycle;
+    private long _lastGcdSubmitTicks;
+
+    /// <summary>
+    /// Minimum gap between GCD UseAction submits while the global GCD is fully Ready.
+    /// Prevents cancel/recast spam when a hardcast is interrupted before the GCD rolls.
+    /// Queue-window submits (GcdRemaining &gt; 0) still use the one-shot cycle flag only.
+    /// </summary>
+    public const int ReadyGcdSubmitCooldownMs = 250;
 
     // Ping compensation: smoothed request->ActionEffect delay for the local player.
     // _animLockDelayEstimate: volatile so the frame-thread read sees hook-thread writes without a lock.
@@ -177,8 +185,19 @@ public sealed unsafe class ActionService : IActionService
         else if (GcdRemaining <= 0)
         {
             CurrentGcdState = GcdState.Ready;
-            _ogcdsUsedThisCycle = 0; // Reset for new GCD cycle
-            _gcdSubmittedThisCycle = false;
+            _ogcdsUsedThisCycle = 0;
+            // Do not clear _gcdSubmittedThisCycle immediately — a cancelled hardcast leaves
+            // GCD Ready and would otherwise re-open UseAction every frame (recast hang).
+            if (_gcdSubmittedThisCycle && _lastGcdSubmitTicks != 0)
+            {
+                var ms = (DateTime.UtcNow.Ticks - _lastGcdSubmitTicks) / TimeSpan.TicksPerMillisecond;
+                if (ms >= ReadyGcdSubmitCooldownMs)
+                    _gcdSubmittedThisCycle = false;
+            }
+            else
+            {
+                _gcdSubmittedThisCycle = false;
+            }
         }
         else if (GcdRemaining <= FFXIVTimings.QueueWindow)
         {
@@ -191,7 +210,9 @@ public sealed unsafe class ActionService : IActionService
         }
         else
         {
+            // GCD actually rolling after a successful cast — new cycle may queue later.
             CurrentGcdState = GcdState.Rolling;
+            _gcdSubmittedThisCycle = false;
         }
     }
 
@@ -209,9 +230,26 @@ public sealed unsafe class ActionService : IActionService
         if (actionManager is null)
             return false;
 
-        // If we already queued a GCD for this cycle, don't spam UseAction every frame during the queue window.
-        if (_gcdSubmittedThisCycle && GcdRemaining > 0)
+        // WrathCombo Auto-Rotation guards: never spam UseAction while already casting
+        // or while the game already has an action queued.
+        if (_lastIsCasting)
             return false;
+        if (actionManager->QueuedActionId != 0)
+            return false;
+
+        // Queue-window one-shot, or Ready-state cooldown after a cancelled hardcast.
+        if (_gcdSubmittedThisCycle)
+        {
+            if (GcdRemaining > 0)
+                return false;
+
+            if (_lastGcdSubmitTicks != 0)
+            {
+                var ms = (DateTime.UtcNow.Ticks - _lastGcdSubmitTicks) / TimeSpan.TicksPerMillisecond;
+                if (ms < ReadyGcdSubmitCooldownMs)
+                    return false;
+            }
+        }
 
         // Do NOT pre-check GetActionStatus here: while the global GCD is rolling it returns 583 ("not ready"),
         // but UseAction still accepts the call in the last ~0.5s and queues the action to fire on rollover.
@@ -220,8 +258,9 @@ public sealed unsafe class ActionService : IActionService
 
         if (result)
         {
-            if (GcdRemaining > 0)
-                _gcdSubmittedThisCycle = true;
+            // Successful submit (including queue-window) — latch so cancel cannot per-frame spam.
+            _gcdSubmittedThisCycle = true;
+            _lastGcdSubmitTicks = DateTime.UtcNow.Ticks;
 
             _lastExecutedAction = action;
             _lastExecuteTime = DateTime.UtcNow;
@@ -232,6 +271,13 @@ public sealed unsafe class ActionService : IActionService
             _actionTracker.LogGcdCast(gcdDuration);
             _actionTracker.LogAttempt(action.ActionId, null, null, ActionResult.Success, 0);
             RaiseActionExecuted(action);
+        }
+        else if (!action.IsInstantCast)
+        {
+            // Orbwalker Buffer returns false while holding DelayedAction. Latch cast-time
+            // failures only — instant fillers must still be able to dispatch next.
+            _gcdSubmittedThisCycle = true;
+            _lastGcdSubmitTicks = DateTime.UtcNow.Ticks;
         }
 
         return result;
@@ -353,17 +399,31 @@ public sealed unsafe class ActionService : IActionService
         if (actionManager is null)
             return false;
 
-        // Same spam guard as ExecuteGcd — the Raw bypass is for validation checks,
-        // not for cycle accounting.
-        if (_gcdSubmittedThisCycle && GcdRemaining > 0)
+        // Same casting/queue/submit guards as ExecuteGcd — Raw only bypasses GetActionStatus.
+        if (_lastIsCasting)
             return false;
+        if (actionManager->QueuedActionId != 0)
+            return false;
+
+        if (_gcdSubmittedThisCycle)
+        {
+            if (GcdRemaining > 0)
+                return false;
+
+            if (_lastGcdSubmitTicks != 0)
+            {
+                var ms = (DateTime.UtcNow.Ticks - _lastGcdSubmitTicks) / TimeSpan.TicksPerMillisecond;
+                if (ms < ReadyGcdSubmitCooldownMs)
+                    return false;
+            }
+        }
 
         var result = actionManager->UseAction(ActionType.Action, rawDispatchId, targetId);
 
         if (result)
         {
-            if (GcdRemaining > 0)
-                _gcdSubmittedThisCycle = true;
+            _gcdSubmittedThisCycle = true;
+            _lastGcdSubmitTicks = DateTime.UtcNow.Ticks;
 
             _lastExecutedAction = action;
             _lastExecuteTime = DateTime.UtcNow;
@@ -373,6 +433,11 @@ public sealed unsafe class ActionService : IActionService
             _actionTracker.LogGcdCast(gcdDuration);
             _actionTracker.LogAttempt(action.ActionId, null, null, ActionResult.Success, 0);
             RaiseActionExecuted(action);
+        }
+        else if (!action.IsInstantCast)
+        {
+            _gcdSubmittedThisCycle = true;
+            _lastGcdSubmitTicks = DateTime.UtcNow.Ticks;
         }
 
         return result;

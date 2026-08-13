@@ -104,6 +104,22 @@ public sealed class WhiteMageSection
                     "Only use lily heals when target is below this HP%.", save, v => config.Healing.ConservativeLilyHpThreshold = v);
             }
 
+            ConfigUIHelpers.Toggle(
+                Loc.T(LocalizedStrings.WhiteMage.EnableAggressiveLilyFlush, "Aggressive Lily Flush"),
+                () => config.Healing.EnableAggressiveLilyFlush,
+                v => config.Healing.EnableAggressiveLilyFlush = v,
+                Loc.T(LocalizedStrings.WhiteMage.EnableAggressiveLilyFlushDesc,
+                    "Prefer Afflatus Solace/Rapture when at 2 Blood Lilies to finish the Misery stack."),
+                save);
+
+            ConfigUIHelpers.Toggle(
+                Loc.T(LocalizedStrings.WhiteMage.EnableLilyCapPrevention, "Prevent Lily Cap"),
+                () => config.Healing.EnableLilyCapPrevention,
+                v => config.Healing.EnableLilyCapPrevention = v,
+                Loc.T(LocalizedStrings.WhiteMage.EnableLilyCapPreventionDesc,
+                    "Spend a Lily on light damage when Lilies are capped so regeneration is not wasted."),
+                save);
+
             ConfigUIHelpers.Spacing();
             ConfigUIHelpers.SectionLabel(Loc.T(LocalizedStrings.WhiteMage.OgcdHeals, "oGCD Heals:"));
 
@@ -117,6 +133,36 @@ public sealed class WhiteMageSection
             ImGui.SameLine();
             ConfigUIHelpers.Toggle("Assize", () => config.Healing.EnableAssize, v => config.Healing.EnableAssize = v,
                 null, save, actionId: WHMActions.Assize.ActionId);
+
+            if (config.Healing.EnableBenediction)
+            {
+                ConfigUIHelpers.BeginIndent();
+                ConfigUIHelpers.Toggle(
+                    Loc.T(LocalizedStrings.WhiteMage.EnableProactiveBenediction, "Proactive Benediction"),
+                    () => config.Healing.EnableProactiveBenediction,
+                    v => config.Healing.EnableProactiveBenediction = v,
+                    Loc.T(LocalizedStrings.WhiteMage.EnableProactiveBenedictionDesc,
+                        "Allow Benediction above the emergency HP threshold when the target is taking heavy sustained damage."),
+                    save);
+
+                if (config.Healing.EnableProactiveBenediction)
+                {
+                    config.Healing.ProactiveBenedictionHpThreshold = ConfigUIHelpers.ThresholdSliderSmall(
+                        Loc.T(LocalizedStrings.WhiteMage.ProactiveBenedictionHp, "Proactive HP Threshold"),
+                        config.Healing.ProactiveBenedictionHpThreshold, 40f, 80f,
+                        Loc.T(LocalizedStrings.WhiteMage.ProactiveBenedictionHpDesc,
+                            "Proactive Benediction may fire below this HP% under heavy damage."),
+                        save, v => config.Healing.ProactiveBenedictionHpThreshold = v);
+
+                    config.Healing.ProactiveBenedictionDamageRate = ConfigUIHelpers.FloatSlider(
+                        Loc.T(LocalizedStrings.WhiteMage.ProactiveBenedictionDps, "Proactive Damage Rate"),
+                        config.Healing.ProactiveBenedictionDamageRate, 0f, 2000f, "%.0f DPS",
+                        Loc.T(LocalizedStrings.WhiteMage.ProactiveBenedictionDpsDesc,
+                            "Minimum incoming DPS on the target to allow proactive Benediction."),
+                        save, v => config.Healing.ProactiveBenedictionDamageRate = v);
+                }
+                ConfigUIHelpers.EndIndent();
+            }
 
             ConfigUIHelpers.Spacing();
             ConfigUIHelpers.SectionLabel(Loc.T(LocalizedStrings.WhiteMage.HealingHots, "Healing HoTs:"));
@@ -183,51 +229,10 @@ public sealed class WhiteMageSection
 
         if (ConfigUIHelpers.BeginTreeNode(Loc.T(LocalizedStrings.WhiteMage.AdvancedHealingSettings, "Advanced Healing Settings")))
         {
-            // Triage Settings
-            ConfigUIHelpers.SectionLabel(Loc.T(LocalizedStrings.WhiteMage.HealingTriageLabel, "Healing Triage:"));
-
-            ConfigUIHelpers.Toggle(Loc.T(LocalizedStrings.WhiteMage.UseDamageBasedTriage, "Use Damage-Based Triage"), () => config.Healing.UseDamageIntakeTriage, v => config.Healing.UseDamageIntakeTriage = v,
-                Loc.T(LocalizedStrings.WhiteMage.UseDamageBasedTriageDesc, "Prioritize healing targets taking active damage."), save);
-
-            if (config.Healing.UseDamageIntakeTriage)
-            {
-                ConfigUIHelpers.BeginIndent();
-                var presetNames = Enum.GetNames<TriagePreset>();
-                var currentPreset = (int)config.Healing.TriagePreset;
-                ImGui.SetNextItemWidth(150);
-                if (ImGui.Combo(Loc.T(LocalizedStrings.WhiteMage.TriagePreset, "Triage Preset"), ref currentPreset, presetNames, presetNames.Length))
-                {
-                    config.Healing.TriagePreset = (TriagePreset)currentPreset;
-                    save();
-                }
-
-                var presetDesc = config.Healing.TriagePreset switch
-                {
-                    TriagePreset.Balanced => Loc.T(LocalizedStrings.WhiteMage.TriagePresetBalanced, "Balanced weights across all factors"),
-                    TriagePreset.TankFocus => Loc.T(LocalizedStrings.WhiteMage.TriagePresetTankFocus, "Prioritize tanks over DPS"),
-                    TriagePreset.SpreadDamage => Loc.T(LocalizedStrings.WhiteMage.TriagePresetSpreadDamage, "React to highest damage intake"),
-                    TriagePreset.RaidWide => Loc.T(LocalizedStrings.WhiteMage.TriagePresetRaidWide, "Focus on lowest HP members"),
-                    TriagePreset.Custom => Loc.T(LocalizedStrings.WhiteMage.TriagePresetCustom, "Use custom weight values below"),
-                    _ => ""
-                };
-                ImGui.TextDisabled(presetDesc);
-
-                // Show custom weights only when Custom is selected
-                if (config.Healing.TriagePreset == TriagePreset.Custom)
-                {
-                    config.Healing.CustomTriageWeights.DamageRate = ConfigUIHelpers.ThresholdSliderSmall(
-                        "Damage Rate", config.Healing.CustomTriageWeights.DamageRate, 0f, 60f, null, save, v => config.Healing.CustomTriageWeights.DamageRate = v);
-                    config.Healing.CustomTriageWeights.TankBonus = ConfigUIHelpers.ThresholdSliderSmall(
-                        "Tank Bonus", config.Healing.CustomTriageWeights.TankBonus, 0f, 60f, null, save, v => config.Healing.CustomTriageWeights.TankBonus = v);
-                    config.Healing.CustomTriageWeights.MissingHp = ConfigUIHelpers.ThresholdSliderSmall(
-                        "Missing HP", config.Healing.CustomTriageWeights.MissingHp, 0f, 60f, null, save, v => config.Healing.CustomTriageWeights.MissingHp = v);
-                    config.Healing.CustomTriageWeights.DamageAcceleration = ConfigUIHelpers.ThresholdSliderSmall(
-                        "Acceleration", config.Healing.CustomTriageWeights.DamageAcceleration, 0f, 30f, null, save, v => config.Healing.CustomTriageWeights.DamageAcceleration = v);
-                }
-                ConfigUIHelpers.EndIndent();
-            }
-
+            ImGui.TextDisabled(Loc.T(LocalizedStrings.WhiteMage.TriageMovedNote,
+                "Healing triage and co-healer awareness now live under Healers > Shared."));
             ConfigUIHelpers.Spacing();
+
             ConfigUIHelpers.SectionLabel(Loc.T(LocalizedStrings.WhiteMage.AssizeHealingLabel, "Assize Healing:"));
 
             ConfigUIHelpers.Toggle(Loc.T(LocalizedStrings.WhiteMage.EnableAssizeForHealing, "Enable Assize for Healing"), () => config.Healing.EnableAssizeHealing, v => config.Healing.EnableAssizeHealing = v,

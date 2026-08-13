@@ -31,11 +31,23 @@ public sealed class TargetingService : ITargetingService
     // Reusable work list for AoE target methods (all called from game thread)
     private readonly List<IBattleNpc> _aoeWorkList = new();
 
+    // Scratch for pack-cluster / sole-hostile bootstrap scan (must not share _aoeWorkList)
+    private readonly List<IBattleNpc> _bootstrapScratch = new(32);
+
     // Optional marker probe — null when not available (existing tests, no prod registration)
     private readonly IMarkerProbe? _markerProbe;
 
     // Reusable set for stop-mark IDs; rebuilt each GetValidEnemies cache flush (no per-frame alloc)
     private readonly HashSet<ulong> _stopMarkedIds = new(2);
+
+    // Tracks when the hard target first became null so PauseWhenNoTarget can grace
+    // brief Tab-retarget gaps without stalling DPS (gaze still pauses after grace).
+    private long? _noTargetSinceTickMs;
+
+    // Memo for OOC sole-hostile pull bootstrap / pack-cluster unlock (one scan per tick).
+    private long _bootstrapScanTickMs = long.MinValue;
+    private ulong _soleBootstrapHostileId;
+    private readonly HashSet<ulong> _engagedPackClusterIds = new(16);
 
     // Tank job IDs: PLD=19, WAR=21, DRK=32, GNB=37
     private static readonly HashSet<uint> TankJobIds = [19, 21, 32, 37];
@@ -60,14 +72,55 @@ public sealed class TargetingService : ITargetingService
     }
 
     /// <summary>
-    /// Returns true when damage targeting should be suppressed because the player has
-    /// dropped their target and <see cref="Config.TargetingConfig.PauseWhenNoTarget"/> is on.
-    /// This is the primary safeguard for gaze mechanics and any moment the player wants
-    /// Olympus to stop attacking — dropping the target is a hard pause signal.
+    /// Always false — <c>PauseWhenNoTarget</c> no longer stalls damage targeting.
+    /// Dual-boss swaps / Tab retargets used to freeze Find/Count after a short grace.
     /// </summary>
-    public bool IsDamageTargetingPaused()
+    public bool IsDamageTargetingPaused(IPlayerCharacter? player = null)
     {
-        return _configuration.Targeting.PauseWhenNoTarget && _targetManager.Target == null;
+        var hasHardTarget = _targetManager.Target != null;
+        var noTargetDurationMs = UpdateNoTargetDurationMs(hasHardTarget);
+        bool? playerInCombat = player == null
+            ? null
+            : (player.StatusFlags & StatusFlags.InCombat) != 0;
+
+        return DamagePauseDecision.ShouldPause(
+            pauseWhenNoTarget: _configuration.Targeting.PauseWhenNoTarget,
+            hasHardTarget: hasHardTarget,
+            playerInCombat: playerInCombat,
+            noTargetDurationMs: noTargetDurationMs);
+    }
+
+    /// <summary>
+    /// Advances / resets the null-hard-target timer. Returns continuous null duration in ms.
+    /// </summary>
+    private long UpdateNoTargetDurationMs(bool hasHardTarget)
+    {
+        if (hasHardTarget)
+        {
+            _noTargetSinceTickMs = null;
+            return 0;
+        }
+
+        var now = Environment.TickCount64;
+        _noTargetSinceTickMs ??= now;
+        return now - _noTargetSinceTickMs.Value;
+    }
+
+    /// <summary>
+    /// Whether CurrentTarget/FocusTarget may fall back to LowestHp this frame.
+    /// Untargetable hard targets (diving shark) always allow fallback.
+    /// </summary>
+    private bool AllowExplicitTargetFallback()
+    {
+        var hard = _targetManager.Target;
+        var hasHardTarget = hard != null;
+        var hardTargetUsable = hard is IBattleNpc b && !b.IsDead && b.IsTargetable;
+        var noTargetDurationMs = UpdateNoTargetDurationMs(hasHardTarget);
+        return DamagePauseDecision.AllowExplicitTargetFallback(
+            strictCurrentTargetStrategy: _configuration.Targeting.StrictCurrentTargetStrategy,
+            hasHardTarget: hasHardTarget,
+            noTargetDurationMs: noTargetDurationMs,
+            hardTargetUsable: hardTargetUsable);
     }
 
     /// <inheritdoc />
@@ -85,8 +138,9 @@ public sealed class TargetingService : ITargetingService
     /// <returns>Best target according to strategy, or null if none found.</returns>
     public IBattleNpc? FindEnemy(EnemyTargetingStrategy strategy, float maxRange, IPlayerCharacter player)
     {
-        // Hard pause: player has no target and PauseWhenNoTarget is on. Covers gaze mechanics.
-        if (IsDamageTargetingPaused())
+        // Hard pause: sustained null hard target with PauseWhenNoTarget (gaze / disengage).
+        // Brief Tab-retarget gaps and OOC bootstrap are not paused — see DamagePauseDecision.
+        if (IsDamageTargetingPaused(player))
             return null;
 
         // Try primary strategy
@@ -99,10 +153,10 @@ public sealed class TargetingService : ITargetingService
         }
 
         // If CurrentTarget/FocusTarget fails, fall back to LowestHp — unless strict mode
-        // is on, in which case an explicit-target strategy with no target stays empty
-        // (prevents auto-retargeting when the player is trying to stop attacking)
+        // is committed (sustained null past grace). During the retarget grace window even
+        // strict mode falls back so Tab between pack members does not stall DPS.
         if (target == null && strategy is EnemyTargetingStrategy.CurrentTarget or EnemyTargetingStrategy.FocusTarget
-            && !_configuration.Targeting.StrictCurrentTargetStrategy)
+            && AllowExplicitTargetFallback())
         {
             target = FindEnemyByStrategy(EnemyTargetingStrategy.LowestHp, maxRange, player);
         }
@@ -129,8 +183,8 @@ public sealed class TargetingService : ITargetingService
         float maxRange,
         IPlayerCharacter player)
     {
-        // Hard pause: player has no target — don't DoT anything.
-        if (IsDamageTargetingPaused())
+        // Hard pause: sustained null hard target — don't DoT anything.
+        if (IsDamageTargetingPaused(player))
             return null;
 
         var strategy = _configuration.Targeting.EnemyStrategy;
@@ -180,17 +234,16 @@ public sealed class TargetingService : ITargetingService
     /// <returns>Number of valid enemies within radius.</returns>
     public int CountEnemiesInRange(float radius, IPlayerCharacter player)
     {
-        // Hard pause: no target → report 0 enemies so AoE thresholds can't trigger.
-        if (IsDamageTargetingPaused())
+        if (IsDamageTargetingPaused(player))
             return 0;
 
+        // AoE threshold counting ignores LoS — pack members behind each other / pillars
+        // must still raise the count so we switch off ST in full pulls.
         int count = 0;
-        var currentTargetId = _targetManager.Target is IBattleNpc ? _targetManager.Target.GameObjectId : 0UL;
-        foreach (var enemy in GetValidEnemies(radius, player))
+        CollectHostilesInRange(radius, player, requireLineOfSight: false, _aoeWorkList);
+        for (var i = 0; i < _aoeWorkList.Count; i++)
         {
-            // Only count enemies in combat or explicitly targeted — avoids counting
-            // non-engaged targets like unattacked dummies or non-pulled packs
-            if ((enemy.StatusFlags & StatusFlags.InCombat) == 0 && enemy.GameObjectId != currentTargetId)
+            if (!IsEnemySelectableForDamage(_aoeWorkList[i], player))
                 continue;
             count++;
         }
@@ -201,50 +254,41 @@ public sealed class TargetingService : ITargetingService
     /// Finds the enemy that has the most other enemies within the specified radius.
     /// Used for targeted AoE spells like Glare IV and Afflatus Misery.
     /// </summary>
-    /// <param name="aoeRadius">Radius around the target to count enemies.</param>
-    /// <param name="maxRange">Maximum range from player to target.</param>
-    /// <param name="player">Current player character.</param>
-    /// <returns>Best AoE target and count of enemies that will be hit (including target).</returns>
     public (IBattleNpc? target, int hitCount) FindBestAoETarget(float aoeRadius, float maxRange, IPlayerCharacter player)
     {
-        // Hard pause: no target.
-        if (IsDamageTargetingPaused())
+        if (IsDamageTargetingPaused(player))
             return (null, 0);
 
         IBattleNpc? bestTarget = null;
         int bestHitCount = 0;
 
-        // Collect all valid enemies in reusable work list
-        _aoeWorkList.Clear();
-        foreach (var enemy in GetValidEnemies(maxRange, player))
+        // Ignore LoS for AoE decisions (same as CountEnemiesInRange).
+        CollectHostilesInRange(maxRange, player, requireLineOfSight: false, _aoeWorkList);
+        for (var i = _aoeWorkList.Count - 1; i >= 0; i--)
         {
-            _aoeWorkList.Add(enemy);
+            if (!IsEnemySelectableForDamage(_aoeWorkList[i], player))
+                _aoeWorkList.RemoveAt(i);
         }
 
         if (_aoeWorkList.Count == 0)
             return (null, 0);
 
-        // Early exit: if only 1 enemy, no need for O(n²) calculation
         if (_aoeWorkList.Count == 1)
             return (_aoeWorkList[0], 1);
 
-        // For each potential target, count how many enemies would be hit
-        var aoeRadiusSquared = aoeRadius * aoeRadius;
         foreach (var potentialTarget in _aoeWorkList)
         {
-            int hitCount = 1; // Always hits the target itself
+            int hitCount = 1;
 
-            // Count other enemies within AoE radius of this target
             foreach (var other in _aoeWorkList)
             {
                 if (other.EntityId == potentialTarget.EntityId)
                     continue;
 
+                var hitRadius = aoeRadius + other.HitboxRadius;
                 var distSquared = Vector3.DistanceSquared(potentialTarget.Position, other.Position);
-                if (distSquared <= aoeRadiusSquared)
-                {
+                if (distSquared <= hitRadius * hitRadius)
                     hitCount++;
-                }
             }
 
             if (hitCount > bestHitCount)
@@ -260,8 +304,7 @@ public sealed class TargetingService : ITargetingService
     /// <inheritdoc />
     public IBattleNpc? FindEnemyForAction(EnemyTargetingStrategy strategy, uint actionId, IPlayerCharacter player)
     {
-        // Hard pause: no target → no damage targeting at all.
-        if (IsDamageTargetingPaused())
+        if (IsDamageTargetingPaused(player))
             return null;
 
         var target = FindEnemyByActionStrategy(strategy, actionId, player);
@@ -269,11 +312,10 @@ public sealed class TargetingService : ITargetingService
         if (target == null && strategy == EnemyTargetingStrategy.TankAssist && _configuration.Targeting.UseTankAssistFallback)
             target = FindEnemyByActionStrategy(EnemyTargetingStrategy.LowestHp, actionId, player);
 
-        // Fall back from explicit-target strategies to LowestHp only when strict mode
-        // is off. Strict mode keeps explicit-target intent as a hard stop — important
-        // for players who use CurrentTarget to manually control every engagement.
+        // Fall back from explicit-target strategies to LowestHp during retarget grace or
+        // when strict mode is off. Sustained null + strict stays empty (gaze / stop).
         if (target == null && strategy is EnemyTargetingStrategy.CurrentTarget or EnemyTargetingStrategy.FocusTarget
-            && !_configuration.Targeting.StrictCurrentTargetStrategy)
+            && AllowExplicitTargetFallback())
             target = FindEnemyByActionStrategy(EnemyTargetingStrategy.LowestHp, actionId, player);
 
         return target;
@@ -410,7 +452,7 @@ public sealed class TargetingService : ITargetingService
             if (obj.ObjectKind != ObjectKind.BattleNpc) continue;
             if (!obj.IsTargetable) continue;
             if (obj.IsDead) continue;
-            if (obj.YalmDistanceX > 15) continue;
+            if (obj.CurrentDistance > 15) continue;
             if (obj is not IBattleNpc npc) continue;
             if ((byte)npc.BattleNpcKind != Olympus.Compat.BattleNpcKinds.Combatant && npc.SubKind != 0) continue;
             if (_configuration.Targeting.EnableInvulnerabilityFiltering &&
@@ -473,13 +515,12 @@ public sealed class TargetingService : ITargetingService
     private IBattleNpc? FindFirstAttackMarkedEnemy(float maxRange, IPlayerCharacter player)
     {
         var attackIds = _markerProbe!.GetAttackMarkTargets();
-        var currentTargetId = _targetManager.Target is IBattleNpc ? _targetManager.Target.GameObjectId : 0UL;
 
-        // Collect valid in-combat enemies into the reusable work list (cache hit = fast)
+        // Collect selectable enemies into the reusable work list (cache hit = fast)
         _aoeWorkList.Clear();
         foreach (var e in GetValidEnemies(maxRange, player))
         {
-            if ((e.StatusFlags & StatusFlags.InCombat) != 0 || e.GameObjectId == currentTargetId)
+            if (IsEnemySelectableForDamage(e, player))
                 _aoeWorkList.Add(e);
         }
 
@@ -495,17 +536,132 @@ public sealed class TargetingService : ITargetingService
         return null;
     }
 
+    /// <summary>
+    /// Shared engagement gate for damage targeting (Count / Find* / AoE best-target).
+    /// Always allows the hard target (dummies, intentional pulls). While the player is
+    /// in combat, every valid hostile is selectable — pack adds often lag on
+    /// <see cref="StatusFlags.InCombat"/> after a pull. Out of combat, enemies already
+    /// flagged InCombat are selectable (tank-pulled boss). Additionally, a sole
+    /// targetable hostile within bootstrap range is selectable so boss-seal pulls can
+    /// start before either InCombat flag flips — multi-mob trash stays blocked.
+    /// </summary>
+    private bool IsEnemySelectableForDamage(IBattleNpc enemy, IPlayerCharacter player)
+    {
+        var isHardTarget = _targetManager.Target is IBattleNpc hardTarget
+            && hardTarget.GameObjectId == enemy.GameObjectId;
+        var playerInCombat = (player.StatusFlags & StatusFlags.InCombat) != 0;
+        var enemyInCombat = (enemy.StatusFlags & StatusFlags.InCombat) != 0;
+        EnsureBootstrapScan(player);
+        var isSole = _soleBootstrapHostileId != 0UL && _soleBootstrapHostileId == enemy.GameObjectId;
+        var inCluster = _engagedPackClusterIds.Contains(enemy.GameObjectId);
+
+        return DamageEngagementDecision.IsSelectable(
+            isHardTarget,
+            playerInCombat,
+            enemyInCombat,
+            isSole,
+            inCluster);
+    }
+
+    /// <summary>
+    /// One object-table scan per tick: sole-hostile bootstrap id + engaged pack cluster
+    /// (InCombat seeds + hard target, plus hostiles within PackClusterLinkYalms).
+    /// Does not touch the GetValidEnemies cache.
+    /// </summary>
+    private void EnsureBootstrapScan(IPlayerCharacter player)
+    {
+        var now = Environment.TickCount64;
+        if (_bootstrapScanTickMs == now)
+            return;
+
+        _bootstrapScanTickMs = now;
+        _soleBootstrapHostileId = 0UL;
+        _engagedPackClusterIds.Clear();
+
+        var playerPos = player.Position;
+        var maxRange = DamageEngagementDecision.PullBootstrapRangeYalms;
+        var maxRangeYalms = (byte)Math.Ceiling(maxRange);
+        var linkSq = DamageEngagementDecision.PackClusterLinkYalms * DamageEngagementDecision.PackClusterLinkYalms;
+        var hardTargetId = _targetManager.Target is IBattleNpc ht ? ht.GameObjectId : 0UL;
+
+        // Pass 1: collect hostiles in bootstrap range; track sole id + InCombat/hard seeds.
+        _bootstrapScratch.Clear();
+        ulong soleId = 0UL;
+        var hostileCount = 0;
+
+        foreach (var obj in _objectTable)
+        {
+            if (obj.ObjectKind != ObjectKind.BattleNpc)
+                continue;
+            if (obj is not IBattleNpc npc)
+                continue;
+            if (!obj.IsTargetable || obj.IsDead)
+                continue;
+            if ((byte)npc.BattleNpcKind != Olympus.Compat.BattleNpcKinds.Combatant && npc.SubKind != 0)
+                continue;
+            if (obj.CurrentDistance > maxRangeYalms + (int)Math.Ceiling(obj.HitboxRadius))
+                continue;
+
+            var effectiveRange = maxRange + npc.HitboxRadius + player.HitboxRadius;
+            if (Vector3.DistanceSquared(playerPos, npc.Position) > effectiveRange * effectiveRange)
+                continue;
+
+            hostileCount++;
+            soleId = hostileCount == 1 ? npc.GameObjectId : 0UL;
+            _bootstrapScratch.Add(npc);
+
+            var isHard = hardTargetId != 0UL && npc.GameObjectId == hardTargetId;
+            if (isHard || (npc.StatusFlags & StatusFlags.InCombat) != 0)
+                _engagedPackClusterIds.Add(npc.GameObjectId);
+        }
+
+        _soleBootstrapHostileId = hostileCount == 1 ? soleId : 0UL;
+
+        // Pass 2: flood-fill pack cluster so chained adds (A–B–C) all unlock for AoE.
+        if (_engagedPackClusterIds.Count == 0 || _bootstrapScratch.Count == 0)
+            return;
+
+        bool grew;
+        do
+        {
+            grew = false;
+            for (var i = 0; i < _bootstrapScratch.Count; i++)
+            {
+                var candidate = _bootstrapScratch[i];
+                if (_engagedPackClusterIds.Contains(candidate.GameObjectId))
+                    continue;
+
+                for (var j = 0; j < _bootstrapScratch.Count; j++)
+                {
+                    var seed = _bootstrapScratch[j];
+                    if (!_engagedPackClusterIds.Contains(seed.GameObjectId))
+                        continue;
+
+                    if (Vector3.DistanceSquared(candidate.Position, seed.Position) <= linkSq)
+                    {
+                        _engagedPackClusterIds.Add(candidate.GameObjectId);
+                        grew = true;
+                        break;
+                    }
+                }
+            }
+        } while (grew);
+    }
+
+    private ulong GetSoleBootstrapHostileId(IPlayerCharacter player)
+    {
+        EnsureBootstrapScan(player);
+        return _soleBootstrapHostileId;
+    }
+
     private IBattleNpc? FindLowestHpEnemy(float maxRange, IPlayerCharacter player)
     {
         IBattleNpc? best = null;
         uint lowestHp = uint.MaxValue;
-        var currentTargetId = _targetManager.Target is IBattleNpc ? _targetManager.Target.GameObjectId : 0UL;
 
         foreach (var enemy in GetValidEnemies(maxRange, player))
         {
-            // Only consider enemies in combat or explicitly targeted by the player —
-            // avoids targeting non-engaged enemies like unattacked dummies or non-pulled packs
-            if ((enemy.StatusFlags & StatusFlags.InCombat) == 0 && enemy.GameObjectId != currentTargetId)
+            if (!IsEnemySelectableForDamage(enemy, player))
                 continue;
 
             if (enemy.CurrentHp < lowestHp)
@@ -522,11 +678,10 @@ public sealed class TargetingService : ITargetingService
     {
         IBattleNpc? best = null;
         uint highestHp = 0;
-        var currentTargetId = _targetManager.Target is IBattleNpc ? _targetManager.Target.GameObjectId : 0UL;
 
         foreach (var enemy in GetValidEnemies(maxRange, player))
         {
-            if ((enemy.StatusFlags & StatusFlags.InCombat) == 0 && enemy.GameObjectId != currentTargetId)
+            if (!IsEnemySelectableForDamage(enemy, player))
                 continue;
 
             if (enemy.CurrentHp > highestHp)
@@ -544,11 +699,10 @@ public sealed class TargetingService : ITargetingService
         IBattleNpc? best = null;
         float nearestDist = float.MaxValue;
         var playerPos = player.Position;
-        var currentTargetId = _targetManager.Target is IBattleNpc ? _targetManager.Target.GameObjectId : 0UL;
 
         foreach (var enemy in GetValidEnemies(maxRange, player))
         {
-            if ((enemy.StatusFlags & StatusFlags.InCombat) == 0 && enemy.GameObjectId != currentTargetId)
+            if (!IsEnemySelectableForDamage(enemy, player))
                 continue;
 
             var dist = Vector3.DistanceSquared(playerPos, enemy.Position);
@@ -622,8 +776,25 @@ public sealed class TargetingService : ITargetingService
     private IBattleNpc? FindCurrentTarget(float maxRange, IPlayerCharacter player)
     {
         var target = _targetManager.Target;
-        if (target is IBattleNpc enemy && IsValidEnemy(enemy, maxRange, player))
+        if (target is not IBattleNpc enemy)
+            return null;
+
+        // Usable hard target.
+        if (enemy.IsTargetable && IsValidEnemy(enemy, maxRange, player))
             return enemy;
+
+        // Untargetable hard target (Anyder water dive, brief boss flicker): only keep it when
+        // nothing else is selectable. Otherwise return null so LowestHp can pick the sibling.
+        if (!enemy.IsTargetable && IsValidEnemy(enemy, maxRange, player, allowUntargetable: true))
+        {
+            foreach (var other in GetValidEnemies(maxRange, player))
+            {
+                if (other.GameObjectId != enemy.GameObjectId)
+                    return null;
+            }
+
+            return enemy;
+        }
 
         return null;
     }
@@ -638,7 +809,7 @@ public sealed class TargetingService : ITargetingService
     }
 
     /// <summary>
-    /// Gets valid enemies in range, using cache when available.
+    /// Gets valid enemies in range, using cache when available (LoS applied when configured).
     /// </summary>
     private IEnumerable<IBattleNpc> GetValidEnemies(float maxRange, IPlayerCharacter player)
     {
@@ -648,7 +819,6 @@ public sealed class TargetingService : ITargetingService
             cacheAge < _configuration.Targeting.TargetCacheTtlMs &&
             Math.Abs(_lastCacheRange - maxRange) < 0.1f)
         {
-            // Validate cached entries are still valid (O(n) with RemoveAll vs O(n²) with RemoveAt)
             _cachedEnemies.RemoveAll(e => !IsStillValid(e));
 
             if (_cachedEnemies.Count > 0)
@@ -659,12 +829,26 @@ public sealed class TargetingService : ITargetingService
             }
         }
 
-        // Rebuild cache
-        _cachedEnemies.Clear();
+        CollectHostilesInRange(maxRange, player, requireLineOfSight: true, _cachedEnemies);
         _lastCacheRange = maxRange;
         _cacheTimer.Restart();
 
-        // Collect stop-mark IDs once per rebuild so we don't call the probe per enemy
+        foreach (var enemy in _cachedEnemies)
+            yield return enemy;
+    }
+
+    /// <summary>
+    /// Collects hostiles in range into <paramref name="into"/>. Used by ST Find (with LoS)
+    /// and AoE Count/FindBestAoETarget (without LoS so full packs are not under-counted).
+    /// </summary>
+    private void CollectHostilesInRange(
+        float maxRange,
+        IPlayerCharacter player,
+        bool requireLineOfSight,
+        List<IBattleNpc> into)
+    {
+        into.Clear();
+
         _stopMarkedIds.Clear();
         if (_configuration.Targeting.FilterStopMarkers && _markerProbe != null)
         {
@@ -674,61 +858,69 @@ public sealed class TargetingService : ITargetingService
 
         var playerPos = player.Position;
         var maxRangeYalms = (byte)Math.Ceiling(maxRange);
+        var hardTargetId = _targetManager.Target is IBattleNpc hardTarget
+            ? hardTarget.GameObjectId
+            : 0UL;
+        var losEnabled = requireLineOfSight && _configuration.Targeting.EnableLineOfSightFiltering;
 
         foreach (var obj in _objectTable)
         {
-            // Cheapest checks first
             if (obj.ObjectKind != ObjectKind.BattleNpc)
                 continue;
-
-            if (!obj.IsTargetable)
-                continue;
-
-            if (obj.IsDead)
-                continue;
-
-            // Quick yalm-based range pre-filter (generous buffer for large hitboxes)
-            if (obj.YalmDistanceX > maxRangeYalms + (int)Math.Ceiling(obj.HitboxRadius))
-                continue;
-
-            // Type cast
             if (obj is not IBattleNpc npc)
                 continue;
 
-            // Check if hostile (enemy or striking dummy)
+            var isHardTarget = hardTargetId != 0UL && npc.GameObjectId == hardTargetId;
+
+            if (!obj.IsTargetable && !isHardTarget)
+                continue;
+            if (obj.IsDead)
+                continue;
+            if (obj.CurrentDistance > maxRangeYalms + (int)Math.Ceiling(obj.HitboxRadius))
+                continue;
             if ((byte)npc.BattleNpcKind != Olympus.Compat.BattleNpcKinds.Combatant && npc.SubKind != 0)
                 continue;
 
-            // Precise distance check — effective range includes both hitbox radii
             var effectiveRange = maxRange + npc.HitboxRadius + player.HitboxRadius;
             if (Vector3.DistanceSquared(playerPos, npc.Position) > effectiveRange * effectiveRange)
                 continue;
 
-            // Line-of-sight check — reject enemies behind walls/pillars
-            if (_configuration.Targeting.EnableLineOfSightFiltering &&
-                !HasLineOfSight(playerPos, npc.Position))
+            if (!isHardTarget && losEnabled && !HasLineOfSight(playerPos, npc.Position))
                 continue;
 
-            // Invulnerability check — skip enemies with known invuln status effects
-            // (boss phase transitions, invulnerable adds, untouchable objects).
-            // Only applied to auto-targeting; explicit CurrentTarget/FocusTarget bypass this.
-            if (_configuration.Targeting.EnableInvulnerabilityFiltering &&
+            if (!isHardTarget &&
+                _configuration.Targeting.EnableInvulnerabilityFiltering &&
                 HasInvulnerabilityStatus(npc))
                 continue;
 
-            // Stop-marker exclusion — skip enemies a party leader has flagged with Stop1/Stop2.
-            // Explicit CurrentTarget/FocusTarget strategies bypass this (they don't call GetValidEnemies).
-            if (_stopMarkedIds.Count > 0 && _stopMarkedIds.Contains(npc.GameObjectId))
+            if (!isHardTarget &&
+                _stopMarkedIds.Count > 0 &&
+                _stopMarkedIds.Contains(npc.GameObjectId))
                 continue;
 
-            _cachedEnemies.Add(npc);
-            yield return npc;
+            into.Add(npc);
         }
+
+        var hasTargetable = false;
+        for (var i = 0; i < into.Count; i++)
+        {
+            if (into[i].IsTargetable)
+            {
+                hasTargetable = true;
+                break;
+            }
+        }
+
+        if (hasTargetable)
+            into.RemoveAll(static e => !e.IsTargetable);
     }
 
-    private static bool IsValidEnemy(IBattleNpc enemy, float maxRange, IPlayerCharacter player)
+    private bool IsValidEnemy(IBattleNpc enemy, float maxRange, IPlayerCharacter player, bool allowUntargetable = false)
     {
-        if (!enemy.IsTargetable || enemy.IsDead)
+        if (enemy.IsDead)
+            return false;
+
+        if (!allowUntargetable && !enemy.IsTargetable)
             return false;
 
         if ((byte)enemy.BattleNpcKind != Olympus.Compat.BattleNpcKinds.Combatant && enemy.SubKind != 0)
@@ -737,9 +929,30 @@ public sealed class TargetingService : ITargetingService
         return DistanceHelper.IsInRange(player.Position, enemy.Position, maxRange + enemy.HitboxRadius + player.HitboxRadius);
     }
 
-    private static bool IsStillValid(IBattleNpc enemy)
+    private bool IsStillValid(IBattleNpc enemy)
     {
-        return enemy.IsTargetable && !enemy.IsDead;
+        if (enemy.IsDead)
+            return false;
+
+        // Drop untargetable entries from the cache when a targetable sibling exists so
+        // dual-boss dives do not keep the underwater shark selected across TTL frames.
+        if (enemy.IsTargetable)
+            return true;
+
+        if (_targetManager.Target is IBattleNpc hard
+            && hard.GameObjectId == enemy.GameObjectId)
+        {
+            for (var i = 0; i < _cachedEnemies.Count; i++)
+            {
+                var other = _cachedEnemies[i];
+                if (other.GameObjectId != enemy.GameObjectId && other.IsTargetable)
+                    return false;
+            }
+
+            return true; // sole candidate — brief flicker
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -803,14 +1016,18 @@ public sealed class TargetingService : ITargetingService
     public (IBattleNpc? target, int hitCount, float optimalAngle) FindBestConeAoETarget(
         float coneHalfAngle, float radius, float maxRange, IPlayerCharacter player)
     {
-        if (IsDamageTargetingPaused())
+        if (IsDamageTargetingPaused(player))
             return (null, 0, 0f);
 
         // Use the ability's effect range for candidate filtering, not the rotation's targeting range
         var candidateRange = MathF.Max(radius, maxRange);
         _aoeWorkList.Clear();
         foreach (var e in GetValidEnemies(candidateRange, player))
+        {
+            if (!IsEnemySelectableForDamage(e, player))
+                continue;
             _aoeWorkList.Add(e);
+        }
 
         if (_aoeWorkList.Count == 0) return (null, 0, 0f);
         if (_aoeWorkList.Count == 1)
@@ -862,14 +1079,18 @@ public sealed class TargetingService : ITargetingService
     public (IBattleNpc? target, int hitCount, float optimalAngle) FindBestLineAoETarget(
         float lineWidth, float length, float maxRange, IPlayerCharacter player)
     {
-        if (IsDamageTargetingPaused())
+        if (IsDamageTargetingPaused(player))
             return (null, 0, 0f);
 
         // Use the ability's effect range for candidate filtering, not the rotation's targeting range
         var candidateRange = MathF.Max(length, maxRange);
         _aoeWorkList.Clear();
         foreach (var e in GetValidEnemies(candidateRange, player))
+        {
+            if (!IsEnemySelectableForDamage(e, player))
+                continue;
             _aoeWorkList.Add(e);
+        }
 
         if (_aoeWorkList.Count == 0) return (null, 0, 0f);
         if (_aoeWorkList.Count == 1)

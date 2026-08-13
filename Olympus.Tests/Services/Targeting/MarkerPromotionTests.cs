@@ -36,7 +36,7 @@ public sealed class MarkerPromotionTests
         mock.Setup(x => x.ObjectKind).Returns(ObjectKind.BattleNpc);
         mock.Setup(x => x.IsTargetable).Returns(true);
         mock.Setup(x => x.IsDead).Returns(false);
-        mock.Setup(x => x.YalmDistanceX).Returns(5);       // well within any range
+        mock.Setup(x => x.CurrentDistance).Returns(5); // well within any range
         mock.Setup(x => x.SubKind).Returns((byte)0);       // passes NPC-kind gate unconditionally
         mock.Setup(x => x.Position).Returns(pos ?? Vector3.Zero);
         mock.Setup(x => x.HitboxRadius).Returns(0.5f);
@@ -82,7 +82,7 @@ public sealed class MarkerPromotionTests
         var gapCloserMock = new Mock<IGapCloserSafetyService>();
 
         // Force TTL=0 so the cache never suppresses a fresh rebuild, and disable
-        // PauseWhenNoTarget so IsDamageTargetingPaused() never short-circuits.
+        // PauseWhenNoTarget so IsDamageTargetingPaused never short-circuits.
         config.Targeting.TargetCacheTtlMs = 0;
         config.Targeting.PauseWhenNoTarget = false;
 

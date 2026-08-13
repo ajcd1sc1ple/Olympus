@@ -32,7 +32,7 @@ public sealed class IxocholeHandler : IHealingHandler
 
         var (avgHp, _, injuredCount) = context.PartyHelper.CalculatePartyHealthMetrics(player);
         if (injuredCount < config.AoEHealMinTargets) { context.Debug.IxocholeState = $"{injuredCount} < {config.AoEHealMinTargets} injured"; return; }
-        if (avgHp > config.AoEHealThreshold) { context.Debug.IxocholeState = $"Avg HP {avgHp:P0} > {config.AoEHealThreshold:P0}"; return; }
+        if (avgHp > config.IxocholeThreshold) { context.Debug.IxocholeState = $"Avg HP {avgHp:P0} > {config.IxocholeThreshold:P0}"; return; }
 
         var action = SGEActions.Ixochole;
         if (!context.HealingCoordination.TryReserveAoEHeal(

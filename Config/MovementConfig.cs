@@ -11,6 +11,19 @@ public sealed class MovementConfig
 {
     // Trash AoE avoidance
     public bool EnableTrashAoEAvoidance { get; set; } = false;
+
+    /// <summary>
+    /// When true, trash AoE avoidance is suppressed while BossMod / BossMod Reborn is loaded
+    /// so three movement systems do not fight. Default on.
+    /// </summary>
+    public bool SuppressTrashAvoidanceWhenBossModPresent { get; set; } = true;
+
+    /// <summary>
+    /// When true, trash AoE avoidance runs even if BossMod is loaded (overrides suppress).
+    /// Default off — only for users who intentionally want both.
+    /// </summary>
+    public bool ForceTrashAvoidanceDespiteBossMod { get; set; } = false;
+
     public int ReactionDelayMinMs { get; set; } = 250;
     public int ReactionDelayMaxMs { get; set; } = 700;
     public float ArrivalToleranceMinYalms { get; set; } = 0.3f;

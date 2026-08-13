@@ -11,7 +11,7 @@ public class TimelineConfigTests
         var cfg = new TimelineConfig();
         Assert.True(cfg.EnableTimelinePredictions);
         Assert.Equal(0.8f, cfg.TimelineConfidenceThreshold);
-        Assert.True(cfg.EnableMechanicAwareCasting);
+        Assert.False(cfg.EnableMechanicAwareCasting);
     }
 
     [Theory]

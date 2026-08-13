@@ -7,6 +7,7 @@ using Olympus.Rotation.AstraeaCore.Abilities;
 using Olympus.Rotation.AstraeaCore.Context;
 using Olympus.Rotation.Common.Modules;
 using Olympus.Rotation.Common.Scheduling;
+using static Olympus.Rotation.Common.Scheduling.HealerSchedulerPriorities;
 using Olympus.Services.Training;
 
 namespace Olympus.Rotation.AstraeaCore.Modules;
@@ -93,6 +94,9 @@ public sealed class DefensiveModule : BaseDefensiveModule<IAstraeaContext>, IAst
         if (!context.ActionService.IsActionReady(ASTActions.NeutralSect.ActionId)) return;
         if (context.HasNeutralSect) return;
 
+        var raidwideImminent = TimelineHelper.IsRaidwideImminent(
+            context.TimelineService, context.BossMechanicDetector, context.Configuration, out _);
+
         bool shouldUse = config.NeutralSectStrategy switch
         {
             NeutralSectUsageStrategy.OnCooldown => true,
@@ -102,14 +106,12 @@ public sealed class DefensiveModule : BaseDefensiveModule<IAstraeaContext>, IAst
         };
 
         if (!shouldUse && config.NeutralSectStrategy != NeutralSectUsageStrategy.Manual)
-        {
-            shouldUse = TimelineHelper.IsRaidwideImminent(
-                context.TimelineService, context.BossMechanicDetector, context.Configuration, out _);
-        }
+            shouldUse = raidwideImminent;
 
         if (!shouldUse) return;
 
-        scheduler.PushOgcd(AstraeaAbilities.NeutralSect, player.GameObjectId, priority: 75,
+        var neutralSectPriority = Mitigation(raidwideImminent, reactivePriority: 90);
+        scheduler.PushOgcd(AstraeaAbilities.NeutralSect, player.GameObjectId, priority: neutralSectPriority,
             onDispatched: _ =>
             {
                 SetPlannedAction(context, ASTActions.NeutralSect.Name);
@@ -259,8 +261,9 @@ public sealed class DefensiveModule : BaseDefensiveModule<IAstraeaContext>, IAst
 
         var capturedAvgHp = avgHp;
         var capturedMembersInRange = membersInRange;
+        var cuPriority = Mitigation(raidwideImminent, reactivePriority: 90);
 
-        scheduler.PushOgcd(AstraeaAbilities.CollectiveUnconscious, player.GameObjectId, priority: 82,
+        scheduler.PushOgcd(AstraeaAbilities.CollectiveUnconscious, player.GameObjectId, priority: cuPriority,
             onDispatched: _ =>
             {
                 SetPlannedAction(context, ASTActions.CollectiveUnconscious.Name);

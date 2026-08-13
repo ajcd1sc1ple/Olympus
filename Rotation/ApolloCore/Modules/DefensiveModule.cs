@@ -9,6 +9,7 @@ using Olympus.Rotation.ApolloCore.Context;
 using Olympus.Rotation.ApolloCore.Helpers;
 using Olympus.Rotation.Common.Helpers;
 using Olympus.Rotation.Common.Scheduling;
+using static Olympus.Rotation.Common.Scheduling.HealerSchedulerPriorities;
 using Olympus.Services;
 using Olympus.Services.Party;
 using Olympus.Services.Training;
@@ -20,7 +21,9 @@ namespace Olympus.Rotation.ApolloCore.Modules;
 /// </summary>
 public sealed class DefensiveModule : IApolloModule
 {
-    public int Priority => 20;
+    // Collect before Healing so timeline mits are queued first; candidate
+    // priorities still decide dispatch (timeline mit > heal > DPS).
+    public int Priority => 8;
     public string Name => "Defensive";
 
     private static readonly string[] _liturgyOfTheBellAlternatives =
@@ -187,7 +190,8 @@ public sealed class DefensiveModule : IApolloModule
         var capturedRaidwideSource = raidwideSource;
         var capturedEffectiveThreshold = effectiveThreshold;
 
-        scheduler.PushOgcd(ApolloAbilities.Temperance, player.GameObjectId, priority: 80,
+        var temperancePriority = Mitigation(raidwideImminent, reactivePriority: 90);
+        scheduler.PushOgcd(ApolloAbilities.Temperance, player.GameObjectId, priority: temperancePriority,
             onDispatched: _ =>
             {
                 var execDmgRateStr = capturedDamageRate > 0 ? $", DPS {capturedDamageRate:F0}" : "";
@@ -314,7 +318,11 @@ public sealed class DefensiveModule : IApolloModule
         var capturedChargeInfo = $"{currentCharges}/{maxCharges}";
         var capturedHpThreshold = hpThreshold;
 
-        scheduler.PushOgcd(ApolloAbilities.DivineBenison, tank.GameObjectId, priority: 110,
+        var benisonPriority = Mitigation(
+            shouldApplyForTankBuster,
+            timelineOffset: TimelineTankBusterOffset,
+            reactivePriority: 110);
+        scheduler.PushOgcd(ApolloAbilities.DivineBenison, tank.GameObjectId, priority: benisonPriority,
             onDispatched: _ =>
             {
                 var tankName = capturedTank.Name?.TextValue ?? "Unknown";
@@ -432,7 +440,11 @@ public sealed class DefensiveModule : IApolloModule
         var capturedShouldApplyForTankBuster = shouldApplyForTankBuster;
         var capturedTankBusterSource = aquaveilTankBusterSource;
 
-        scheduler.PushOgcd(ApolloAbilities.Aquaveil, tank.GameObjectId, priority: 120,
+        var aquaveilPriority = Mitigation(
+            shouldApplyForTankBuster,
+            timelineOffset: TimelineTankBusterOffset,
+            reactivePriority: 120);
+        scheduler.PushOgcd(ApolloAbilities.Aquaveil, tank.GameObjectId, priority: aquaveilPriority,
             onDispatched: _ =>
             {
                 var tankName = capturedTank.Name?.TextValue ?? "Unknown";
@@ -595,7 +607,8 @@ public sealed class DefensiveModule : IApolloModule
         var capturedRaidwideImminent = raidwideImminent;
         var capturedRaidwideSource = raidwideSource;
 
-        scheduler.PushGroundTargetedOgcd(ApolloAbilities.LiturgyOfTheBell, targetPosition, priority: 130,
+        var liturgyPriority = Mitigation(raidwideImminent, reactivePriority: 130);
+        scheduler.PushGroundTargetedOgcd(ApolloAbilities.LiturgyOfTheBell, targetPosition, priority: liturgyPriority,
             onDispatched: _ =>
             {
                 context.Debug.PlannedAction = WHMActions.LiturgyOfTheBell.Name;

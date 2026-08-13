@@ -1,10 +1,12 @@
 using System;
 using Olympus.Config;
 using Olympus.Data;
+using Olympus.Rotation.ApolloCore.Helpers;
 using Olympus.Rotation.AsclepiusCore.Abilities;
 using Olympus.Rotation.AsclepiusCore.Context;
 using Olympus.Rotation.AsclepiusCore.Helpers;
 using Olympus.Rotation.Common.Scheduling;
+using static Olympus.Rotation.Common.Scheduling.HealerSchedulerPriorities;
 using Olympus.Services.Training;
 
 namespace Olympus.Rotation.AsclepiusCore.Modules.Healing;
@@ -23,19 +25,32 @@ public sealed class KrasisHandler : IHealingHandler
         if (player.Level < SGEActions.Krasis.MinLevel) return;
         if (!context.ActionService.IsActionReady(SGEActions.Krasis.ActionId)) { context.Debug.KrasisState = "On CD"; return; }
 
-        var target = context.PartyHelper.FindLowestHpPartyMember(player);
+        var tankBusterImminent = TimelineHelper.IsTankBusterImminent(
+            context.TimelineService, context.BossMechanicDetector, context.Configuration, out _);
+
+        var target = tankBusterImminent
+            ? TimelineHelper.ResolveTankBusterTarget(
+                context.PartyHelper.FindTankInParty(player),
+                context.PartyHelper.GetAllPartyMembers(player),
+                player.EntityId)
+            : context.PartyHelper.FindLowestHpPartyMember(player);
         if (target == null) { context.Debug.KrasisState = "No target"; return; }
         if (context.HealingCoordination.IsTargetReserved(target.EntityId, context.PartyCoordinationService)) { context.Debug.KrasisState = "Skipped (reserved)"; return; }
 
         var hpPercent = target.MaxHp > 0 ? (float)target.CurrentHp / target.MaxHp : 1f;
-        if (hpPercent > config.KrasisThreshold) { context.Debug.KrasisState = $"Target at {hpPercent:P0}"; return; }
+        if (hpPercent > config.KrasisThreshold && !tankBusterImminent) { context.Debug.KrasisState = $"Target at {hpPercent:P0}"; return; }
         if (AsclepiusStatusHelper.HasKrasis(target)) { context.Debug.KrasisState = "Already has Krasis"; return; }
 
         var capturedTarget = target;
         var capturedHpPercent = hpPercent;
+        var capturedTb = tankBusterImminent;
         var action = SGEActions.Krasis;
+        var priority = Mitigation(
+            tankBusterImminent,
+            timelineOffset: TimelineTankBusterOffset,
+            reactivePriority: Priority);
 
-        scheduler.PushOgcd(AsclepiusAbilities.Krasis, target.GameObjectId, priority: Priority,
+        scheduler.PushOgcd(AsclepiusAbilities.Krasis, target.GameObjectId, priority: priority,
             onDispatched: _ =>
             {
                 var healAmount = 1000;
@@ -43,7 +58,7 @@ public sealed class KrasisHandler : IHealingHandler
                     capturedTarget.EntityId, context.PartyCoordinationService, healAmount, action.ActionId, 0);
 
                 context.Debug.PlannedAction = action.Name;
-                context.Debug.PlanningState = "Krasis";
+                context.Debug.PlanningState = capturedTb ? "TB Krasis" : "Krasis";
                 context.Debug.KrasisState = "Executing";
 
                 if (context.TrainingService?.IsTrainingEnabled == true)
@@ -57,13 +72,15 @@ public sealed class KrasisHandler : IHealingHandler
                         ActionName = "Krasis",
                         Category = "Healing",
                         TargetName = targetName,
-                        ShortReason = $"Krasis on {targetName} at {capturedHpPercent:P0} - boosting heals",
-                        DetailedReason = $"Krasis placed on {targetName} at {capturedHpPercent:P0} HP. Provides a 20% healing received buff for 10 seconds. Use before your biggest heals to maximize their effectiveness!",
+                        ShortReason = capturedTb
+                            ? $"Krasis on {targetName} before tankbuster"
+                            : $"Krasis on {targetName} at {capturedHpPercent:P0} - boosting heals",
+                        DetailedReason = $"Krasis placed on {targetName} at {capturedHpPercent:P0} HP. Provides a 20% healing received buff for 10 seconds. {(capturedTb ? "Applied before tank buster so follow-up shields and heals hit harder. " : "")}Use before your biggest heals to maximize their effectiveness!",
                         Factors = new[]
                         {
                             $"Target HP: {capturedHpPercent:P0}",
                             $"Threshold: {config.KrasisThreshold:P0}",
-                            "20% healing received buff (10s)",
+                            capturedTb ? "Tank buster imminent — heal received prep" : "20% healing received buff (10s)",
                             "60s cooldown",
                         },
                         Alternatives = new[]
@@ -74,7 +91,7 @@ public sealed class KrasisHandler : IHealingHandler
                         },
                         Tip = "Krasis increases ALL healing the target receives by 20% for 10 seconds. This includes your co-healer's heals and even the target's self-heals! Great for tanks taking heavy damage.",
                         ConceptId = SgeConcepts.KrasisUsage,
-                        Priority = ExplanationPriority.Normal,
+                        Priority = capturedTb ? ExplanationPriority.High : ExplanationPriority.Normal,
                     });
                 }
             });

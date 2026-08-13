@@ -361,5 +361,34 @@ public class ConfigurationTests
         Assert.False(config.Debug.DebugSectionVisibility.ContainsKey("CustomSection"));
     }
 
+    [Fact]
+    public void ResetToDefaults_ResetsAutoAttackUntilDead()
+    {
+        var config = new Configuration { EnableAutoAttackUntilDead = false };
+
+        config.ResetToDefaults();
+
+        Assert.True(config.EnableAutoAttackUntilDead);
+    }
+
+    [Fact]
+    public void ResetToDefaults_ResetsEnableOnAutoAttack()
+    {
+        var config = new Configuration { EnableOnAutoAttack = false };
+
+        config.ResetToDefaults();
+
+        Assert.True(config.EnableOnAutoAttack);
+    }
+
+    [Fact]
+    public void DefaultConfiguration_StartsRotationOnAutoAttack()
+    {
+        var config = new Configuration();
+
+        Assert.True(config.EnableOnAutoAttack);
+        Assert.True(config.EnableAutoAttackUntilDead);
+    }
+
     #endregion
 }

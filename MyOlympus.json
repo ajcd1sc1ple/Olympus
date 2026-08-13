@@ -1,0 +1,10 @@
+{
+  "Name": "MyOlympus",
+  "Author": "Rose (fork)",
+  "Punchline": "Personal Olympus fork — intelligent rotation assistant for all combat jobs",
+  "Description": "MyOlympus: A personal fork of Olympus, the intelligent rotation assistant supporting all 21 combat jobs with healing, damage, mitigation, burst windows, party coordination, and timeline-aware fight predictions.",
+  "InternalName": "MyOlympus",
+  "RepoUrl": "https://github.com/ajcd1sc1ple/Olympus",
+  "Tags": ["combat", "rotation", "healer", "tank", "dps", "jobs"],
+  "DalamudApiLevel": 15
+}

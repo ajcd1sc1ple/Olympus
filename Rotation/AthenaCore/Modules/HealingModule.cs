@@ -40,9 +40,9 @@ public sealed class HealingModule : IAthenaModule
     public void CollectCandidates(IAthenaContext context, RotationScheduler scheduler, bool isMoving)
     {
         context.HealingCoordination.Clear();
-        TryPrePullRecitation(context, scheduler);    // NEW — fires before InCombat gate
+        TryPrePullRecitation(context, scheduler);    // NEW — fires before EnableHealing gate
         TryPrePullAdloquium(context, scheduler);     // NEW — fires after Recitation (next frame)
-        if (!context.InCombat) return;
+        // Heal regardless of combat/target — only the heal master toggle stops healing.
         if (!context.Configuration.EnableHealing) return;
 
         foreach (var handler in _handlers)

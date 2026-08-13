@@ -48,12 +48,14 @@ public sealed class DamageModule : IIrisModule
         {
             TryPushPrePullHardcast(context, scheduler);
             TryPushPrepaintMotif(context, scheduler);
-            return;
         }
+        // Hostile hard target → keep DPS even before server InCombat flips.
+        if (!context.InCombat && context.TargetingService.GetUserEnemyTarget() == null)
+            return;
 
         if (context.IsCasting && !context.CanSlidecast) return;
 
-        if (context.TargetingService.IsDamageTargetingPaused())
+        if (context.TargetingService.IsDamageTargetingPaused(context.Player))
         {
             context.Debug.DamageState = "Paused (no target)";
             // During combat downtime (boss jump): paint missing motifs so three instant

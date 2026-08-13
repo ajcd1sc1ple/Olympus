@@ -1,0 +1,306 @@
+using System.Collections.Generic;
+using System.Numerics;
+using System.Threading;
+using Dalamud.Game.ClientState.Objects;
+using Dalamud.Game.ClientState.Objects.Enums;
+using Dalamud.Game.ClientState.Objects.SubKinds;
+using Dalamud.Game.ClientState.Objects.Types;
+using Dalamud.Game.ClientState.Party;
+using Dalamud.Plugin.Services;
+using Moq;
+using Olympus.Config;
+using Olympus.Services.Targeting;
+using Xunit;
+
+namespace Olympus.Tests.Services.Targeting;
+
+/// <summary>
+/// Pack adds often lag on <see cref="StatusFlags.InCombat"/> after a pull. Once the
+/// player is in combat, Count / Find* / FindBestAoE must all see the same set.
+/// </summary>
+public sealed class EngagementFilterTests
+{
+    private static Mock<IBattleNpc> MakeEnemy(
+        ulong id,
+        uint hp,
+        StatusFlags flags,
+        Vector3? pos = null,
+        bool isTargetable = true)
+    {
+        var mock = new Mock<IBattleNpc>();
+        mock.Setup(x => x.GameObjectId).Returns(id);
+        mock.Setup(x => x.EntityId).Returns((uint)id);
+        mock.Setup(x => x.ObjectKind).Returns(ObjectKind.BattleNpc);
+        mock.Setup(x => x.IsTargetable).Returns(isTargetable);
+        mock.Setup(x => x.IsDead).Returns(false);
+        mock.Setup(x => x.CurrentDistance).Returns(5);
+        mock.Setup(x => x.SubKind).Returns((byte)0);
+        mock.Setup(x => x.Position).Returns(pos ?? Vector3.Zero);
+        mock.Setup(x => x.HitboxRadius).Returns(0.5f);
+        mock.Setup(x => x.StatusFlags).Returns(flags);
+        mock.Setup(x => x.CurrentHp).Returns(hp);
+        mock.Setup(x => x.StatusList).Returns((Dalamud.Game.ClientState.Statuses.StatusList?)null);
+        return mock;
+    }
+
+    private static IPlayerCharacter MakePlayer(StatusFlags flags = 0)
+    {
+        var mock = new Mock<IPlayerCharacter>();
+        mock.Setup(x => x.Position).Returns(Vector3.Zero);
+        mock.Setup(x => x.HitboxRadius).Returns(0.5f);
+        mock.Setup(x => x.GameObjectId).Returns(999ul);
+        mock.Setup(x => x.StatusFlags).Returns(flags);
+        return mock.Object;
+    }
+
+    private static TargetingService BuildService(
+        IEnumerable<IBattleNpc> enemies,
+        IGameObject? currentTarget = null,
+        bool pauseWhenNoTarget = true)
+    {
+        var objectTableMock = new Mock<IObjectTable>();
+        var enemyList = new List<IGameObject>();
+        foreach (var e in enemies) enemyList.Add(e);
+        objectTableMock
+            .Setup(x => x.GetEnumerator())
+            .Returns(() => enemyList.GetEnumerator());
+        objectTableMock
+            .Setup(x => x.SearchById(It.IsAny<ulong>()))
+            .Returns((ulong id) => enemyList.Find(e => e.GameObjectId == id));
+
+        var partyListMock = new Mock<IPartyList>();
+        partyListMock.Setup(x => x.GetEnumerator()).Returns(new List<IPartyMember>().GetEnumerator());
+
+        var targetManagerMock = new Mock<ITargetManager>();
+        targetManagerMock.Setup(x => x.Target).Returns(currentTarget);
+        targetManagerMock.Setup(x => x.FocusTarget).Returns((IGameObject?)null);
+
+        var config = new Configuration();
+        config.Targeting.TargetCacheTtlMs = 0;
+        config.Targeting.PauseWhenNoTarget = pauseWhenNoTarget;
+        config.Targeting.StrictCurrentTargetStrategy = true;
+
+        return new TargetingService(
+            objectTableMock.Object,
+            partyListMock.Object,
+            targetManagerMock.Object,
+            config,
+            new Mock<IGapCloserSafetyService>().Object);
+    }
+
+    [Fact]
+    public void PlayerInCombat_IncludesPackAdd_WithoutEnemyInCombatFlag()
+    {
+        // Hard target is engaged; sibling add has not received InCombat yet (common on pull).
+        var hardTarget = MakeEnemy(1, hp: 5_000, StatusFlags.InCombat);
+        var laggingAdd = MakeEnemy(2, hp: 1_000, flags: 0);
+
+        var svc = BuildService([hardTarget.Object, laggingAdd.Object], currentTarget: hardTarget.Object);
+        var player = MakePlayer(StatusFlags.InCombat);
+
+        var lowest = svc.FindEnemy(EnemyTargetingStrategy.LowestHp, 25f, player);
+        Assert.NotNull(lowest);
+        Assert.Equal(2ul, lowest!.GameObjectId);
+
+        Assert.Equal(2, svc.CountEnemiesInRange(25f, player));
+
+        var (aoeTarget, hitCount) = svc.FindBestAoETarget(5f, 25f, player);
+        Assert.NotNull(aoeTarget);
+        Assert.Equal(2, hitCount);
+    }
+
+    [Fact]
+    public void PlayerOutOfCombat_ExcludesUnpulledPack_WithoutHardTarget()
+    {
+        var adjacent = MakeEnemy(3, hp: 2_000, flags: 0);
+
+        var svc = BuildService([adjacent.Object]);
+        var player = MakePlayer(flags: 0);
+
+        // Sole hostile in range IS selectable (boss-seal pull bootstrap). A single
+        // adjacent mob looks like a boss arena — packs need 2+ to stay blocked.
+        Assert.NotNull(svc.FindEnemy(EnemyTargetingStrategy.LowestHp, 25f, player));
+        Assert.Equal(1, svc.CountEnemiesInRange(25f, player));
+    }
+
+    [Fact]
+    public void PlayerOutOfCombat_ExcludesUnpulledMultiPack_WithoutHardTarget()
+    {
+        var a = MakeEnemy(30, hp: 2_000, flags: 0, pos: new Vector3(1f, 0f, 0f));
+        var b = MakeEnemy(31, hp: 2_000, flags: 0, pos: new Vector3(2f, 0f, 0f));
+
+        var svc = BuildService([a.Object, b.Object]);
+        var player = MakePlayer(flags: 0);
+
+        Assert.Null(svc.FindEnemy(EnemyTargetingStrategy.LowestHp, 25f, player));
+        Assert.Equal(0, svc.CountEnemiesInRange(25f, player));
+        Assert.Null(svc.FindBestAoETarget(5f, 25f, player).target);
+    }
+
+    [Fact]
+    public void PlayerOutOfCombat_SoleBossWithoutInCombat_IsSelectableForPull()
+    {
+        // Boss seal: neither player nor boss has InCombat yet, no hard target.
+        // Must still Find/Count so combat bootstrap can start DPS.
+        var boss = MakeEnemy(32, hp: 1_000_000, flags: 0);
+
+        var svc = BuildService([boss.Object], currentTarget: null);
+        var player = MakePlayer(flags: 0);
+
+        Assert.Equal(1, svc.CountEnemiesInRange(30f, player));
+        var target = svc.FindEnemy(EnemyTargetingStrategy.LowestHp, 30f, player);
+        Assert.NotNull(target);
+        Assert.Equal(32ul, target!.GameObjectId);
+    }
+
+    [Fact]
+    public void PlayerOutOfCombat_HardTargetWithoutInCombat_StillSelectable()
+    {
+        // Striking dummy / pre-pull hard target: no InCombat on player or enemy.
+        var dummy = MakeEnemy(4, hp: 50_000, flags: 0);
+
+        var svc = BuildService([dummy.Object], currentTarget: dummy.Object);
+        var player = MakePlayer(flags: 0);
+
+        var target = svc.FindEnemy(EnemyTargetingStrategy.LowestHp, 25f, player);
+        Assert.NotNull(target);
+        Assert.Equal(4ul, target!.GameObjectId);
+        Assert.Equal(1, svc.CountEnemiesInRange(25f, player));
+    }
+
+    [Fact]
+    public void PlayerOutOfCombat_HardTargetInCombat_IncludesNearbyPackAdd()
+    {
+        // Tank pulled one mob; sibling add often lags on InCombat. Within pack-cluster
+        // link range it must count for AoE — otherwise full packs stay on ST.
+        var hardTarget = MakeEnemy(5, hp: 8_000, StatusFlags.InCombat, pos: new Vector3(1f, 0f, 0f));
+        var adjacent = MakeEnemy(6, hp: 500, flags: 0, pos: new Vector3(2f, 0f, 0f));
+
+        var svc = BuildService([hardTarget.Object, adjacent.Object], currentTarget: hardTarget.Object);
+        var player = MakePlayer(flags: 0);
+
+        Assert.Equal(2, svc.CountEnemiesInRange(25f, player));
+        var (aoeTarget, hitCount) = svc.FindBestAoETarget(5f, 25f, player);
+        Assert.NotNull(aoeTarget);
+        Assert.Equal(2, hitCount);
+    }
+
+    [Fact]
+    public void PlayerOutOfCombat_ChainedPackAdds_FloodFillUnlocksAll()
+    {
+        // A engaged, B and C lag InCombat but form a chain within link range.
+        var a = MakeEnemy(50, hp: 8_000, StatusFlags.InCombat, pos: new Vector3(0f, 0f, 0f));
+        var b = MakeEnemy(51, hp: 5_000, flags: 0, pos: new Vector3(10f, 0f, 0f));
+        var c = MakeEnemy(52, hp: 4_000, flags: 0, pos: new Vector3(20f, 0f, 0f));
+
+        var svc = BuildService([a.Object, b.Object, c.Object], currentTarget: a.Object);
+        var player = MakePlayer(flags: 0);
+
+        Assert.Equal(3, svc.CountEnemiesInRange(30f, player));
+        Assert.Equal(3, svc.FindBestAoETarget(12f, 30f, player).hitCount);
+    }
+
+    [Fact]
+    public void PlayerOutOfCombat_HardTargetInCombat_DoesNotUnlockDistantPack()
+    {
+        var hardTarget = MakeEnemy(40, hp: 8_000, StatusFlags.InCombat, pos: new Vector3(0f, 0f, 0f));
+        var distant = MakeEnemy(41, hp: 500, flags: 0, pos: new Vector3(25f, 0f, 0f));
+
+        var svc = BuildService([hardTarget.Object, distant.Object], currentTarget: hardTarget.Object);
+        var player = MakePlayer(flags: 0);
+
+        Assert.Equal(1, svc.CountEnemiesInRange(30f, player));
+        var lowest = svc.FindEnemy(EnemyTargetingStrategy.LowestHp, 30f, player);
+        Assert.NotNull(lowest);
+        Assert.Equal(40ul, lowest!.GameObjectId);
+    }
+
+    [Fact]
+    public void PlayerOutOfCombat_EngagedBossWithoutHardTarget_IsSelectable()
+    {
+        // Tank already pulled: boss has InCombat, healer still OOC and may have the tank
+        // (or nothing) targeted. Count/Find must still see the boss so combat bootstrap works
+        // even with default PauseWhenNoTarget (OOC never pauses).
+        var boss = MakeEnemy(7, hp: 1_000_000, StatusFlags.InCombat);
+
+        var svc = BuildService([boss.Object], currentTarget: null);
+        var player = MakePlayer(flags: 0);
+
+        Assert.False(svc.IsDamageTargetingPaused(player));
+        Assert.Equal(1, svc.CountEnemiesInRange(30f, player));
+        var target = svc.FindEnemy(EnemyTargetingStrategy.LowestHp, 30f, player);
+        Assert.NotNull(target);
+        Assert.Equal(7ul, target!.GameObjectId);
+    }
+
+    [Fact]
+    public void PlayerInCombat_BriefNullHardTarget_DoesNotPauseFindOrCount()
+    {
+        // Tab retarget: hard target is briefly null while StatusFlags.InCombat stays set.
+        // PauseWhenNoTarget must not zero Count/Find or DPS stalls mid-pack (Anyder sharks).
+        var sharkA = MakeEnemy(10, hp: 8_000, StatusFlags.InCombat);
+        var sharkB = MakeEnemy(11, hp: 4_000, flags: 0); // add lagging InCombat
+
+        var svc = BuildService([sharkA.Object, sharkB.Object], currentTarget: null);
+        var player = MakePlayer(StatusFlags.InCombat);
+
+        Assert.False(svc.IsDamageTargetingPaused(player));
+        Assert.Equal(2, svc.CountEnemiesInRange(25f, player));
+        var lowest = svc.FindEnemy(EnemyTargetingStrategy.LowestHp, 25f, player);
+        Assert.NotNull(lowest);
+        Assert.Equal(11ul, lowest!.GameObjectId);
+    }
+
+    [Fact]
+    public void PlayerInCombat_SustainedNullHardTarget_DoesNotPauseFindOrCount()
+    {
+        // PauseWhenNoTarget stalls removed — keep DPS on engaged hostiles without a hard target.
+        var shark = MakeEnemy(12, hp: 8_000, StatusFlags.InCombat);
+        var svc = BuildService([shark.Object], currentTarget: null);
+        var player = MakePlayer(StatusFlags.InCombat);
+
+        Assert.False(svc.IsDamageTargetingPaused(player));
+
+        Thread.Sleep(DamagePauseDecision.NoTargetGraceMs + 50);
+
+        Assert.False(svc.IsDamageTargetingPaused(player));
+        Assert.Equal(1, svc.CountEnemiesInRange(25f, player));
+        Assert.NotNull(svc.FindEnemy(EnemyTargetingStrategy.LowestHp, 25f, player));
+    }
+
+    [Fact]
+    public void UntargetableHardTarget_WithTargetableSibling_SelectsSibling()
+    {
+        // Clear Ichthyology: diving shark stays hard-targeted but IsTargetable=false.
+        var diving = MakeEnemy(20, hp: 2_000, StatusFlags.InCombat, isTargetable: false);
+        var surfaced = MakeEnemy(21, hp: 8_000, StatusFlags.InCombat, isTargetable: true);
+
+        var svc = BuildService([diving.Object, surfaced.Object], currentTarget: diving.Object);
+        var player = MakePlayer(StatusFlags.InCombat);
+
+        Assert.False(svc.IsDamageTargetingPaused(player));
+        Assert.Equal(1, svc.CountEnemiesInRange(25f, player));
+
+        var lowest = svc.FindEnemy(EnemyTargetingStrategy.LowestHp, 25f, player);
+        Assert.NotNull(lowest);
+        Assert.Equal(21ul, lowest!.GameObjectId);
+
+        var current = svc.FindEnemy(EnemyTargetingStrategy.CurrentTarget, 25f, player);
+        Assert.NotNull(current);
+        Assert.Equal(21ul, current!.GameObjectId);
+    }
+
+    [Fact]
+    public void StrictCurrentTarget_BriefNull_FallsBackToLowestHp()
+    {
+        var sharkA = MakeEnemy(13, hp: 8_000, StatusFlags.InCombat);
+        var sharkB = MakeEnemy(14, hp: 3_000, StatusFlags.InCombat);
+
+        var svc = BuildService([sharkA.Object, sharkB.Object], currentTarget: null);
+        var player = MakePlayer(StatusFlags.InCombat);
+
+        var target = svc.FindEnemy(EnemyTargetingStrategy.CurrentTarget, 25f, player);
+        Assert.NotNull(target);
+        Assert.Equal(14ul, target!.GameObjectId);
+    }
+}

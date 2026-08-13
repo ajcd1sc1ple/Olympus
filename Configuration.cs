@@ -50,7 +50,7 @@ public sealed class Configuration : IPluginConfiguration
     /// Higher values = more conservative (safer), lower = more aggressive (faster DPS).
     /// Valid range: 0.0 to 2.0 seconds.
     /// </summary>
-    private float _movementTolerance = 0.1f;
+    private float _movementTolerance = 0.25f;
     public float MovementTolerance
     {
         get => _movementTolerance;
@@ -58,10 +58,39 @@ public sealed class Configuration : IPluginConfiguration
     }
 
     /// <summary>
+    /// When true and PunishXIV Orbwalker is loaded/enabled for the current job,
+    /// Olympus allows cast-time GCDs while move keys are held (Orbwalker locks movement).
+    /// </summary>
+    public bool EnableOrbwalkerIntegration { get; set; } = true;
+
+    /// <summary>
+    /// After a cast-time GCD is cancelled while moving, briefly suppress further hardcasts
+    /// so Olympus does not spam-retry into the same cancel. Default on.
+    /// </summary>
+    public bool EnablePostCancelHardcastHold { get; set; } = true;
+
+    /// <summary>
+    /// Duration of the post-cancel hardcast hold in seconds (clamped 0.3–0.6).
+    /// </summary>
+    private float _postCancelHardcastHoldSeconds = 0.4f;
+    public float PostCancelHardcastHoldSeconds
+    {
+        get => _postCancelHardcastHoldSeconds;
+        set => _postCancelHardcastHoldSeconds = Math.Clamp(value, 0.3f, 0.6f);
+    }
+
+    /// <summary>
     /// When true, Olympus will start executing the rotation when auto-attack is active
     /// on the target, even before the InCombat flag is set.
     /// </summary>
-    public bool EnableOnAutoAttack { get; set; } = false;
+    public bool EnableOnAutoAttack { get; set; } = true;
+
+    /// <summary>
+    /// When true, Olympus keeps game auto-attack on until the engaged enemy dies,
+    /// then turns it off. Also starts the rotation when auto-attack is active on a
+    /// living hostile (before the server InCombat flag). Default on.
+    /// </summary>
+    public bool EnableAutoAttackUntilDead { get; set; } = true;
 
     /// <summary>
     /// When true, Olympus adds a smoothed estimate of network round-trip delay to the
@@ -191,9 +220,13 @@ public sealed class Configuration : IPluginConfiguration
         var showDuringCutscenes = ShowDuringCutscenes;
 
         // Reset general behavior
-        EnableOnAutoAttack = false;
+        EnableOnAutoAttack = true;
+        EnableAutoAttackUntilDead = true;
         EnablePingCompensation = false;
-        MovementTolerance = 0.1f;
+        EnableOrbwalkerIntegration = true;
+        EnablePostCancelHardcastHold = true;
+        PostCancelHardcastHoldSeconds = 0.4f;
+        MovementTolerance = 0.25f;
 
         // Reset master toggles
         EnableHealing = true;

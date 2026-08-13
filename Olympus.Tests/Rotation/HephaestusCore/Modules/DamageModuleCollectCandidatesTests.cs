@@ -251,7 +251,7 @@ public class DamageModuleCollectCandidatesTests
         targeting.Setup(x => x.FindEnemy(
                 It.IsAny<EnemyTargetingStrategy>(), It.IsAny<float>(), It.IsAny<IPlayerCharacter>()))
             .Returns(enemy.Object);
-        targeting.Setup(x => x.IsDamageTargetingPaused()).Returns(false);
+        targeting.Setup(x => x.IsDamageTargetingPaused(It.IsAny<IPlayerCharacter?>())).Returns(false);
         targeting.Setup(x => x.CountEnemiesInRange(It.IsAny<float>(), It.IsAny<IPlayerCharacter>()))
             .Returns(0);
 
@@ -293,7 +293,7 @@ public class DamageModuleCollectCandidatesTests
         targeting.Setup(x => x.FindEnemy(
                 It.IsAny<EnemyTargetingStrategy>(), It.IsAny<float>(), It.IsAny<IPlayerCharacter>()))
             .Returns(enemy.Object);
-        targeting.Setup(x => x.IsDamageTargetingPaused()).Returns(false);
+        targeting.Setup(x => x.IsDamageTargetingPaused(It.IsAny<IPlayerCharacter?>())).Returns(false);
         targeting.Setup(x => x.CountEnemiesInRange(It.IsAny<float>(), It.IsAny<IPlayerCharacter>()))
             .Returns(0);
 
@@ -359,7 +359,7 @@ public class DamageModuleCollectCandidatesTests
         targeting.Setup(x => x.FindEnemy(
                 It.IsAny<EnemyTargetingStrategy>(), It.IsAny<float>(), It.IsAny<IPlayerCharacter>()))
             .Returns((IBattleNpc?)null);
-        targeting.Setup(x => x.IsDamageTargetingPaused()).Returns(false);
+        targeting.Setup(x => x.IsDamageTargetingPaused(It.IsAny<IPlayerCharacter?>())).Returns(false);
 
         var safetyMock = new Mock<IGapCloserSafetyService>();
         targeting.Setup(x => x.GapCloserSafety).Returns(safetyMock.Object);
@@ -393,7 +393,7 @@ public class DamageModuleCollectCandidatesTests
         targeting.Setup(x => x.FindEnemyForAction(
                 It.IsAny<EnemyTargetingStrategy>(), It.IsAny<uint>(), It.IsAny<IPlayerCharacter>()))
             .Returns(enemy.Object);
-        targeting.Setup(x => x.IsDamageTargetingPaused()).Returns(false);
+        targeting.Setup(x => x.IsDamageTargetingPaused(It.IsAny<IPlayerCharacter?>())).Returns(false);
         targeting.Setup(x => x.CountEnemiesInRange(It.IsAny<float>(), It.IsAny<IPlayerCharacter>()))
             .Returns(enemyCount);
 

@@ -16,12 +16,14 @@ public sealed class MovementSection
     private readonly Configuration config;
     private readonly Action save;
     private readonly IRMIWalkHookService hook;
+    private readonly IBossModPresence? bossModPresence;
 
-    public MovementSection(Configuration config, Action save, IRMIWalkHookService hook)
+    public MovementSection(Configuration config, Action save, IRMIWalkHookService hook, IBossModPresence? bossModPresence = null)
     {
         this.config = config;
         this.save = save;
         this.hook = hook;
+        this.bossModPresence = bossModPresence;
     }
 
     public void Draw()
@@ -57,6 +59,35 @@ public sealed class MovementSection
             Loc.T(LocalizedStrings.Movement.EnableTrashAoEAvoidanceDesc,
                 "Trash mobs only. Suspended during boss fights and high-end content (savage, ultimate, extreme, criterion, chaotic). Default off."),
             save);
+
+        bossModPresence?.Refresh();
+        if (bossModPresence?.IsLoaded == true)
+        {
+            var detected = bossModPresence.DetectedName ?? "BossMod";
+            ImGui.TextDisabled(string.Format(
+                Loc.T(LocalizedStrings.Movement.BossModDetected,
+                    "BossMod detected ({0}). Olympus trash dodge is suppressed by default so it does not fight BossMod movement."),
+                detected));
+
+            ConfigUIHelpers.Toggle(
+                Loc.T(LocalizedStrings.Movement.SuppressWhenBossMod, "Suppress trash dodge when BossMod is loaded"),
+                () => config.Movement.SuppressTrashAvoidanceWhenBossModPresent,
+                v => config.Movement.SuppressTrashAvoidanceWhenBossModPresent = v,
+                Loc.T(LocalizedStrings.Movement.SuppressWhenBossModDesc,
+                    "Recommended on when using BossMod / BossMod Reborn for automatic movement."),
+                save);
+
+            if (config.Movement.SuppressTrashAvoidanceWhenBossModPresent)
+            {
+                ConfigUIHelpers.Toggle(
+                    Loc.T(LocalizedStrings.Movement.ForceDespiteBossMod, "Force trash dodge despite BossMod"),
+                    () => config.Movement.ForceTrashAvoidanceDespiteBossMod,
+                    v => config.Movement.ForceTrashAvoidanceDespiteBossMod = v,
+                    Loc.T(LocalizedStrings.Movement.ForceDespiteBossModDesc,
+                        "Override the suppress and run Olympus dodge anyway. Can cause movement fighting."),
+                    save);
+            }
+        }
 
         if (!config.Movement.EnableTrashAoEAvoidance)
             return;

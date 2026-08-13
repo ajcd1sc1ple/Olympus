@@ -40,7 +40,7 @@ namespace Olympus;
 public sealed class Plugin : IDalamudPlugin
 {
     public const string PluginVersion = "4.17.2";
-    private const string CommandName = "/olympus";
+    private const string CommandName = "/myolympus";
 
     private readonly IDalamudPluginInterface pluginInterface;
     private readonly IFramework framework;
@@ -118,7 +118,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly OlympusLocalization localization;
     private readonly GameDataLocalizer gameDataLocalizer;
 
-    private readonly WindowSystem windowSystem = new("Olympus");
+    private readonly WindowSystem windowSystem = new("MyOlympus");
     private readonly ConfigWindow configWindow;
     private readonly MainWindow mainWindow;
     private readonly DebugWindow debugWindow;
@@ -137,6 +137,10 @@ public sealed class Plugin : IDalamudPlugin
     private readonly SmartAoEService smartAoEService;
 
     private readonly OlympusIpc olympusIpc;
+    private readonly OrbwalkerIpc orbwalkerIpc;
+    private readonly BossModTimelineIpc bossModTimelineIpc;
+    private readonly Olympus.Services.AutoAttack.AutoAttackService autoAttackService;
+    private readonly Olympus.Services.Movement.BossModPresence bossModPresence;
     private readonly UpdateCheckerService updateCheckerService;
 
     // Pull-intent state machine + consumable services (tincture automation)
@@ -252,7 +256,8 @@ public sealed class Plugin : IDalamudPlugin
         this.debuffDetectionService = new DebuffDetectionService(dataManager);
 
         // Timeline service for fight-aware predictions (must precede TankCooldownService)
-        this.timelineService = new TimelineService(log, combatEventService);
+        this.bossModTimelineIpc = new BossModTimelineIpc(pluginInterface, log);
+        this.timelineService = new TimelineService(log, combatEventService, configuration, bossModTimelineIpc);
         this.onAbilityUsedHandler = (sourceId, actionId) => timelineService.OnAbilityUsed(sourceId, actionId);
         combatEventService.OnAbilityUsed += this.onAbilityUsedHandler;
 
@@ -369,11 +374,17 @@ public sealed class Plugin : IDalamudPlugin
             objectTable, clientState, bnpcRankProbe,
             () => configuration.Movement);
         this.cameraAzimuthProbe = new Olympus.Services.Movement.CameraAzimuthProbe();
+        this.orbwalkerIpc = new OrbwalkerIpc(pluginInterface, log);
+        this.autoAttackService = new Olympus.Services.AutoAttack.AutoAttackService(
+            configuration, targetManager, objectTable, log);
+        this.bossModPresence = new Olympus.Services.Movement.BossModPresence(pluginInterface, log);
         this.trashAvoidanceService = new Olympus.Services.Movement.TrashAvoidanceService(
             rmiWalkHookService, enemyAoECastTracker, bossCombatDetector,
             bgCollisionProbe, movementClock,
             () => configuration.Movement, log, clientState, highEndContent: highEndContentService, objectTable: objectTable, condition: condition,
-            cameraProbe: cameraAzimuthProbe);
+            cameraProbe: cameraAzimuthProbe,
+            orbwalkerIpc: orbwalkerIpc,
+            bossModPresence: bossModPresence);
         this.interactDispatchService = new Olympus.Services.Movement.InteractDispatchService(
             objectTable, clientState, objectInteractor, movementClock,
             () => configuration.Movement, log);
@@ -439,7 +450,7 @@ public sealed class Plugin : IDalamudPlugin
         this.drawingService = new DrawingService(pluginInterface, configuration.DrawHelper, log);
         this.drawCanvas = new DrawCanvas(drawingService, configuration, objectTable, clientState, targetManager, gameGui, positionalService, rotationManager);
         this.updateCheckerService = new UpdateCheckerService(PluginVersion, notificationManager, log);
-        this.configWindow = new ConfigWindow(configuration, SaveConfiguration, updateCheckerService, textureProvider, rmiWalkHookService);
+        this.configWindow = new ConfigWindow(configuration, SaveConfiguration, updateCheckerService, textureProvider, rmiWalkHookService, orbwalkerIpc, objectTable, bossModPresence);
         this.mainWindow = new MainWindow(configuration, SaveConfiguration, OpenConfigUI, OpenDebugUI, OpenAnalyticsUI, OpenTrainingUI, OpenChangelogUI, OpenOverlayUI, PluginVersion, rotationManager, textureProvider);
         var smartAoETab = new SmartAoETab(aoeTracker, drawCanvas, objectTable);
         this.debugWindow = new DebugWindow(debugService, configuration, timelineService, smartAoETab);
@@ -500,7 +511,7 @@ public sealed class Plugin : IDalamudPlugin
 
         this.commandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
         {
-            HelpMessage = "Open Olympus window. Subcommands: toggle | debug | hardcast [on|off|toggle]"
+            HelpMessage = "Open MyOlympus window. Subcommands: toggle | debug | healing [on|off|toggle] | hardcast [on|off|toggle]"
         });
 
         this.framework.Update += OnFrameworkUpdate;
@@ -554,6 +565,9 @@ public sealed class Plugin : IDalamudPlugin
 
         // Core services (register both interface and concrete where interface exists)
         container.Register(configuration);
+        container.Register<IOrbwalkerIpc, OrbwalkerIpc>(orbwalkerIpc);
+        container.Register<Olympus.Services.Movement.IBossModPresence, Olympus.Services.Movement.BossModPresence>(bossModPresence);
+        container.Register<Olympus.Services.AutoAttack.IAutoAttackService, Olympus.Services.AutoAttack.AutoAttackService>(autoAttackService);
         container.Register<IActionTracker, ActionTracker>(actionTracker);
         container.Register<IActionService, ActionService>(actionService);
         container.Register<ICombatEventService, CombatEventService>(combatEventService);
@@ -653,8 +667,8 @@ public sealed class Plugin : IDalamudPlugin
                 SaveConfiguration();
                 olympusIpc.NotifyStateChanged(configuration.Enabled);
                 var status = configuration.Enabled ? "enabled" : "disabled";
-                chatGui.Print($"Olympus {status}");
-                log.Info($"Olympus {status}");
+                chatGui.Print($"MyOlympus {status}");
+                log.Info($"MyOlympus {status}");
                 break;
 
             case "debug":
@@ -666,10 +680,48 @@ public sealed class Plugin : IDalamudPlugin
                 HandleHardcastCommand(subArg);
                 break;
 
+            case "healing":
+            case "heal":
+                HandleHealingCommand(subArg);
+                break;
+
             default:
                 mainWindow.Toggle();
                 break;
         }
+    }
+
+    private void HandleHealingCommand(string subArg)
+    {
+        var current = configuration.EnableHealing;
+        bool newValue;
+
+        switch (subArg)
+        {
+            case "on":
+            case "enable":
+            case "true":
+                newValue = true;
+                break;
+            case "off":
+            case "disable":
+            case "false":
+                newValue = false;
+                break;
+            case "":
+            case "toggle":
+                newValue = !current;
+                break;
+            default:
+                chatGui.Print($"Usage: /myolympus healing [on|off|toggle]. Currently {(current ? "on" : "off")}.");
+                return;
+        }
+
+        configuration.EnableHealing = newValue;
+        SaveConfiguration();
+        var state = newValue ? "enabled" : "disabled";
+        chatGui.Print($"MyOlympus healing {state}.");
+        log.Info($"Healing {state}");
     }
 
     private void HandleHardcastCommand(string subArg)
@@ -694,14 +746,14 @@ public sealed class Plugin : IDalamudPlugin
                 newValue = !current;
                 break;
             default:
-                chatGui.Print($"Usage: /olympus hardcast [on|off|toggle]. Currently {(current ? "on" : "off")}.");
+                chatGui.Print($"Usage: /myolympus hardcast [on|off|toggle]. Currently {(current ? "on" : "off")}.");
                 return;
         }
 
         configuration.Resurrection.AllowHardcastRaise = newValue;
         SaveConfiguration();
         var state = newValue ? "enabled" : "disabled";
-        chatGui.Print($"Olympus hardcast raise {state}.");
+        chatGui.Print($"MyOlympus hardcast raise {state}.");
         log.Info($"Hardcast raise {state}");
     }
 
@@ -798,6 +850,13 @@ public sealed class Plugin : IDalamudPlugin
             trashAvoidanceService.Update();
             interactDispatchService.Update();
 
+            // Keep auto-attack on until the engaged enemy dies. Runs even when the
+            // rotation is disabled so the hold latch clears cleanly.
+            {
+                var inCombatForAa = (localPlayer.StatusFlags & Dalamud.Game.ClientState.Objects.Enums.StatusFlags.InCombat) != 0;
+                autoAttackService.Update(inCombatForAa);
+            }
+
             if (!configuration.Enabled)
                 return;
 
@@ -893,6 +952,8 @@ public sealed class Plugin : IDalamudPlugin
         fightSummaryWindow?.Dispose();
         windowSystem.RemoveAllWindows();
         olympusIpc.Dispose();
+        orbwalkerIpc.Dispose();
+        bossModTimelineIpc.Dispose();
         partyCoordinationIpc?.Dispose();
         fflogsService?.Dispose();
         telemetryService.Dispose();

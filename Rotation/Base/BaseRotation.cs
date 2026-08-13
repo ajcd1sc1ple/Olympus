@@ -7,11 +7,13 @@ using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.ClientState.Party;
 using Dalamud.Plugin.Services;
 using Olympus.Data;
+using Olympus.Ipc;
 using Olympus.Rotation.Common;
 using Olympus.Rotation.Common.Helpers;
 using Olympus.Rotation.Common.Scheduling;
 using Olympus.Services;
 using Olympus.Services.Action;
+using Olympus.Services.AutoAttack;
 using Olympus.Services.Debuff;
 using Olympus.Services.Prediction;
 using Olympus.Services.Resource;
@@ -26,7 +28,7 @@ namespace Olympus.Rotation.Base;
 /// </summary>
 /// <typeparam name="TContext">The job-specific context type.</typeparam>
 /// <typeparam name="TModule">The job-specific module interface type.</typeparam>
-public abstract class BaseRotation<TContext, TModule> : IRotation, IDisposable
+public abstract class BaseRotation<TContext, TModule> : IRotation, IDisposable, IOrbwalkerCastIntegration, IAutoAttackHoldIntegration, IBossModPresenceIntegration
     where TContext : IRotationContext
     where TModule : IRotationModule<TContext>
 {
@@ -91,10 +93,29 @@ public abstract class BaseRotation<TContext, TModule> : IRotation, IDisposable
     /// </summary>
     protected readonly Olympus.Services.Pull.IPullIntentService? PullIntentService;
 
+    /// <summary>
+    /// Optional Orbwalker IPC. Attached by <see cref="RotationFactory"/> after construction.
+    /// </summary>
+    protected IOrbwalkerIpc? OrbwalkerIpc { get; private set; }
+
+    /// <summary>
+    /// Optional auto-attack hold service. Attached by <see cref="RotationFactory"/> after construction.
+    /// </summary>
+    protected IAutoAttackService? AutoAttackService { get; private set; }
+
+    /// <summary>
+    /// Optional BossMod presence. Attached by <see cref="RotationFactory"/> after construction.
+    /// </summary>
+    protected Olympus.Services.Movement.IBossModPresence? BossModPresence { get; private set; }
+
     #endregion
 
     #region Private Fields
 
+    /// <summary>
+    /// Range used to detect already-engaged enemies when bootstrapping combat before
+    /// the local player's server InCombat flag flips (healer pull lag).
+    /// </summary>
     // Error throttling to avoid log spam
     private DateTime _lastErrorTime = DateTime.MinValue;
     private int _suppressedErrorCount;
@@ -104,9 +125,17 @@ public abstract class BaseRotation<TContext, TModule> : IRotation, IDisposable
     private string? _errorKeyNullRef;
     private string? _errorKeyGeneral;
 
-    // Movement detection
+    // Movement detection (horizontal speed + grace). Speed ignores BossMod arrive crawl.
     private Vector3 _lastPosition;
     private DateTime _lastMovementTime = DateTime.MinValue;
+    private float _smoothedHorizontalSpeed;
+    private bool _hasMovementSample;
+
+    // Post-cancel hardcast hold (prevents spam-retry after a move-cancelled cast)
+    private bool _wasCastingCastTimeGcd;
+    private float _previousCurrentCastTime;
+    private float _previousTotalCastTime;
+    private DateTime _hardcastHoldUntil = DateTime.MinValue;
 
     // Cached timestamp for current frame — set once at start of ExecuteInternal
     protected DateTime FrameTimestamp;
@@ -232,13 +261,69 @@ public abstract class BaseRotation<TContext, TModule> : IRotation, IDisposable
         // Update MP forecast service with current state
         UpdateMpForecast(player);
 
-        // Movement detection
+        // Movement detection (horizontal speed / grace). Module IsMoving must stay true while
+        // physically pathing so instant fillers keep casting. Orbwalker only clears that flag
+        // once MovementLocked (cast/buffer/force-stop) — not merely because the job is enabled.
         var (isMoving, _) = UpdateMovement(player);
+        var orbwalkerActive = OrbwalkerIpc?.IsActiveForJob(player.ClassJob.RowId) == true;
+        var orbwalkerLocked = OrbwalkerIpc?.MovementLocked() == true;
+        var movementBlocksHardcasts = OrbwalkerCastGate.ShouldBlockHardcasts(
+            isMoving,
+            Configuration.EnableOrbwalkerIntegration,
+            orbwalkerActive,
+            orbwalkerLocked);
+
+        // After a move-cancelled cast-time GCD, keep suppressing hardcasts briefly.
+        // Do not override an active Orbwalker lock — that re-creates the cancel/hold deadlock
+        // with BossMod pathing (hold blocks the next hardcast → Orbwalker never re-locks).
+        if (Configuration.EnablePostCancelHardcastHold)
+        {
+            var holdSeconds = PostCancelCastHold.ClampHoldSeconds(Configuration.PostCancelHardcastHoldSeconds);
+            var castWasCancelled = PostCancelCastHold.WasCancelled(
+                _previousCurrentCastTime,
+                _previousTotalCastTime);
+            _hardcastHoldUntil = PostCancelCastHold.UpdateHoldUntil(
+                wasCastingCastTimeGcd: _wasCastingCastTimeGcd,
+                isCasting: player.IsCasting,
+                isMoving: isMoving,
+                castWasCancelled: castWasCancelled,
+                now: FrameTimestamp,
+                holdDuration: TimeSpan.FromSeconds(holdSeconds),
+                currentHoldUntil: _hardcastHoldUntil);
+
+            if (PostCancelCastHold.ShouldBlockHardcasts(
+                    PostCancelCastHold.ShouldBlock(FrameTimestamp, _hardcastHoldUntil),
+                    orbwalkerLocked))
+                movementBlocksHardcasts = true;
+        }
+
+        var wasCastingCastTimeGcd = _wasCastingCastTimeGcd;
+        _wasCastingCastTimeGcd = player.IsCasting && player.TotalCastTime > 0f;
+        if (_wasCastingCastTimeGcd)
+        {
+            _previousCurrentCastTime = player.CurrentCastTime;
+            _previousTotalCastTime = player.TotalCastTime;
+        }
+        else if (!wasCastingCastTimeGcd)
+        {
+            // Truly idle (not the falling-edge frame) — drop stale bar samples.
+            _previousCurrentCastTime = 0f;
+            _previousTotalCastTime = 0f;
+        }
 
         // Combat tracking — also treat auto-attack as combat if enabled
         var inCombat = (player.StatusFlags & StatusFlags.InCombat) != 0;
         if (!inCombat && Configuration.EnableOnAutoAttack)
             inCombat = IsAutoAttacking();
+        if (!inCombat && AutoAttackService?.ShouldTreatAsInCombat == true)
+            inCombat = true;
+        // Healers often wait seconds for their own InCombat flag after a tank pull.
+        // Start DPS when a hostile is hard-targeted, or when engagement Find/Count sees
+        // an engaged or sole nearby hostile (boss seal before flags flip).
+        if (!inCombat
+            && (TargetingService.GetUserEnemyTarget() != null
+                || TargetingService.CountEnemiesInRange(DamageEngagementDecision.PullBootstrapRangeYalms, player) > 0))
+            inCombat = true;
         UpdateCombatState(inCombat);
 
         // Job-specific service updates
@@ -250,15 +335,25 @@ public abstract class BaseRotation<TContext, TModule> : IRotation, IDisposable
             TrackGcdState(player);
         }
 
-        // Create context for modules
-        var context = CreateContext(player, inCombat, isMoving);
+        // Create context for modules — pass cast-gate flag so hardcasts are allowed under Orbwalker
+        var context = CreateContext(player, inCombat, movementBlocksHardcasts);
 
         // Update debug state from all modules (skip if debug window closed for performance)
         UpdateModuleDebugStates(context);
 
         // Execute modules in priority order
-        ExecuteModules(context, isMoving, inCombat);
+        ExecuteModules(context, movementBlocksHardcasts, inCombat);
     }
+
+    /// <inheritdoc />
+    void IOrbwalkerCastIntegration.AttachOrbwalkerIpc(IOrbwalkerIpc? ipc) => OrbwalkerIpc = ipc;
+
+    /// <inheritdoc />
+    void IAutoAttackHoldIntegration.AttachAutoAttackService(IAutoAttackService? service) => AutoAttackService = service;
+
+    /// <inheritdoc />
+    void IBossModPresenceIntegration.AttachBossModPresence(Olympus.Services.Movement.IBossModPresence? presence) =>
+        BossModPresence = presence;
 
     /// <summary>
     /// Updates MP forecast service with current player MP state.
@@ -267,22 +362,46 @@ public abstract class BaseRotation<TContext, TModule> : IRotation, IDisposable
     protected abstract void UpdateMpForecast(IPlayerCharacter player);
 
     /// <summary>
-    /// Updates movement detection with configurable grace period.
+    /// Updates movement detection from horizontal speed with configurable grace period.
+    /// BossMod AI micro-pathing below the speed floor does not keep hardcasts blocked.
     /// </summary>
     /// <returns>Tuple of (isMoving, positionChanged)</returns>
     protected (bool isMoving, bool positionChanged) UpdateMovement(IPlayerCharacter player)
     {
-        var positionChanged = Vector3.DistanceSquared(player.Position, _lastPosition) > FFXIVTimings.MovementThresholdSquared;
+        BossModPresence?.Refresh();
+        var bossModLoaded = BossModPresence?.IsLoaded == true;
+        var thresholdSquared = MovementGate.ThresholdSquaredFor(bossModLoaded);
+        var speedThreshold = MovementGate.SpeedThresholdFor(bossModLoaded);
+
+        var positionChanged = false;
+        if (!_hasMovementSample)
+        {
+            // First sample: seed position without treating spawn/teleport as a dodge.
+            _hasMovementSample = true;
+            _smoothedHorizontalSpeed = 0f;
+        }
+        else
+        {
+            var sampleSpeed = MovementGate.HorizontalSpeed(player.Position, _lastPosition, FrameDeltaSeconds);
+            _smoothedHorizontalSpeed = MovementGate.SmoothSpeed(_smoothedHorizontalSpeed, sampleSpeed);
+            positionChanged = MovementGate.HasMoved(player.Position, _lastPosition, thresholdSquared)
+                || _smoothedHorizontalSpeed > speedThreshold;
+        }
+
         _lastPosition = player.Position;
 
-        // Track when we last detected actual movement
+        // Track when we last detected meaningful movement (speed or large step).
         if (positionChanged)
             _lastMovementTime = FrameTimestamp;
 
-        // Consider player as "moving" if position changed OR within grace period after stopping
-        // This prevents stutter-casting when player briefly stops during movement
-        var timeSinceMovement = (FrameTimestamp - _lastMovementTime).TotalSeconds;
-        var isMoving = positionChanged || timeSinceMovement < Configuration.MovementTolerance;
+        var timeSinceMovement = _lastMovementTime == DateTime.MinValue
+            ? double.MaxValue
+            : (FrameTimestamp - _lastMovementTime).TotalSeconds;
+        var isMoving = MovementGate.IsMoving(
+            _smoothedHorizontalSpeed,
+            speedThreshold,
+            timeSinceMovement,
+            Configuration.MovementTolerance);
 
         return (isMoving, positionChanged);
     }

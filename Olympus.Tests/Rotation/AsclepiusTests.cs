@@ -45,12 +45,12 @@ public class AsclepiusTests
     }
 
     [Fact]
-    public void ModulePriorities_HealingBeforeDefensive()
+    public void ModulePriorities_DefensiveBeforeHealing()
     {
         var healing = new HealingModule();
         var defensive = new DefensiveModule();
 
-        Assert.True(healing.Priority < defensive.Priority);
+        Assert.True(defensive.Priority < healing.Priority);
     }
 
     [Fact]
@@ -67,8 +67,8 @@ public class AsclepiusTests
     {
         Assert.Equal(3, new KardiaModule().Priority);
         Assert.Equal(5, new ResurrectionModule().Priority);
+        Assert.Equal(8, new DefensiveModule().Priority);
         Assert.Equal(10, new HealingModule().Priority);
-        Assert.Equal(20, new DefensiveModule().Priority);
         Assert.Equal(50, new DamageModule().Priority);
     }
 
@@ -214,6 +214,40 @@ public class AsclepiusTests
     }
 
     [Fact]
+    public void DamageModule_CollectCandidates_OutOfCombat_WithHostileHardTarget_PushesDosis()
+    {
+        // Targeting an enemy is enough — do not wait for server InCombat.
+        var module = new DamageModule();
+        var config = AsclepiusTestContext.CreateDefaultSageConfiguration();
+
+        var enemy = new Mock<IBattleNpc>();
+        enemy.Setup(x => x.GameObjectId).Returns(42ul);
+        var targetingService = MockBuilders.CreateMockTargetingService();
+        targetingService.Setup(x => x.GetUserEnemyTarget()).Returns(enemy.Object);
+        targetingService.Setup(x => x.FindEnemy(
+            It.IsAny<EnemyTargetingStrategy>(),
+            It.IsAny<float>(),
+            It.IsAny<IPlayerCharacter>()))
+            .Returns(enemy.Object);
+
+        var actionService = MockBuilders.CreateMockActionService(canExecuteGcd: true);
+        var context = AsclepiusTestContext.Create(
+            config: config,
+            actionService: actionService,
+            targetingService: targetingService,
+            level: 90,
+            inCombat: false,
+            canExecuteGcd: true);
+
+        var scheduler = SchedulerFactory.CreateForTest(actionService);
+        module.CollectCandidates(context, scheduler, isMoving: false);
+
+        Assert.Contains(
+            scheduler.InspectGcdQueue(),
+            c => c.Behavior.Action.ActionId == SGEActions.DosisIII.ActionId);
+    }
+
+    [Fact]
     public void DamageModule_CollectCandidates_AllDamageDisabled_PushesNothing()
     {
         var module = new DamageModule();
@@ -283,11 +317,59 @@ public class AsclepiusTests
     }
 
     [Fact]
-    public void HealingModule_CollectCandidates_NotInCombat_PushesNothing()
+    public void DamageModule_CollectCandidates_EmergencyHp_SuppressesDamageGcds()
     {
+        // GcdEmergencyThreshold (default 40%): damage GCDs must yield so heals own the GCD.
+        var module = new DamageModule();
+        var config = AsclepiusTestContext.CreateDefaultSageConfiguration();
+        config.EnableHealing = true;
+        config.Healing.GcdEmergencyThreshold = 0.40f;
+
+        var enemy = new Mock<IBattleNpc>();
+        var targetingService = MockBuilders.CreateMockTargetingService();
+        targetingService.Setup(x => x.FindEnemy(
+            It.IsAny<EnemyTargetingStrategy>(),
+            It.IsAny<float>(),
+            It.IsAny<IPlayerCharacter>()))
+            .Returns(enemy.Object);
+
+        var partyHelper = MockBuilders.CreateMockPartyHelper();
+        partyHelper.Setup(x => x.CalculatePartyHealthMetrics(It.IsAny<IPlayerCharacter>()))
+            .Returns((0.30f, 0.30f, 1));
+
+        var actionService = MockBuilders.CreateMockActionService(canExecuteGcd: true, canExecuteOgcd: true);
+        var context = AsclepiusTestContext.Create(
+            config: config,
+            actionService: actionService,
+            targetingService: targetingService,
+            partyHelper: partyHelper,
+            level: 90,
+            inCombat: true,
+            canExecuteGcd: true,
+            canExecuteOgcd: true);
+
+        var scheduler = SchedulerFactory.CreateForTest(actionService);
+        module.CollectCandidates(context, scheduler, isMoving: false);
+
+        Assert.Empty(scheduler.InspectGcdQueue());
+        Assert.Equal("Holding: GCD emergency heal", context.Debug.DpsState);
+    }
+
+    [Fact]
+    public void HealingModule_CollectCandidates_OutOfCombat_StillHealsWhenInjured()
+    {
+        // Healing must run with no combat / no enemy target; only EnableHealing stops it.
         var module = new HealingModule();
+        var config = AsclepiusTestContext.CreateDefaultSageConfiguration();
+        config.Healing.UseDamageIntakeTriage = false;
+
+        var injured = MockBuilders.CreateMockBattleChara(
+            entityId: 2u, currentHp: 10000, maxHp: 50000).Object; // 20% < DiagnosisThreshold
+        var partyHelper = MockBuilders.CreateMockPartyHelper(lowestHpMember: injured);
         var actionService = MockBuilders.CreateMockActionService(canExecuteGcd: true);
         var context = AsclepiusTestContext.Create(
+            config: config,
+            partyHelper: partyHelper,
             actionService: actionService,
             inCombat: false,
             canExecuteGcd: true);
@@ -295,8 +377,9 @@ public class AsclepiusTests
         var scheduler = SchedulerFactory.CreateForTest(actionService);
         module.CollectCandidates(context, scheduler, isMoving: false);
 
-        Assert.Empty(scheduler.InspectGcdQueue());
-        Assert.Empty(scheduler.InspectOgcdQueue());
+        Assert.Contains(
+            scheduler.InspectGcdQueue(),
+            c => c.Behavior.Action.ActionId == SGEActions.Diagnosis.ActionId);
     }
 
     [Fact]

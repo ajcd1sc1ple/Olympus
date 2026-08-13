@@ -7,7 +7,7 @@ namespace Olympus.Tests.Rotation.AstraeaCore.Modules;
 /// <summary>
 /// Tests for Astrologian (Astraea) module priority ordering.
 /// Ensures modules execute in the correct priority order:
-///   3 - Card, 5 - Resurrection, 10 - Healing, 20 - Defensive, 30 - Buff, 50 - Damage
+///   3 - Card, 5 - Resurrection, 8 - Defensive, 10 - Healing, 30 - Buff, 50 - Damage
 /// </summary>
 public class ModulePriorityTests
 {
@@ -34,15 +34,17 @@ public class ModulePriorityTests
         var card = new CardModule();
         var resurrection = new ResurrectionModule();
         var healing = new HealingModule();
+        var defensive = new DefensiveModule();
         var damage = new DamageModule();
 
         Assert.True(resurrection.Priority > card.Priority);
         Assert.True(resurrection.Priority < healing.Priority);
+        Assert.True(resurrection.Priority < defensive.Priority);
         Assert.True(resurrection.Priority < damage.Priority);
     }
 
     [Fact]
-    public void HealingModule_HasThirdHighestPriority()
+    public void DefensiveModule_CollectsBeforeHealing()
     {
         var card = new CardModule();
         var resurrection = new ResurrectionModule();
@@ -50,14 +52,14 @@ public class ModulePriorityTests
         var defensive = new DefensiveModule();
         var damage = new DamageModule();
 
-        Assert.True(healing.Priority > card.Priority);
-        Assert.True(healing.Priority > resurrection.Priority);
-        Assert.True(healing.Priority < defensive.Priority);
-        Assert.True(healing.Priority < damage.Priority);
+        Assert.True(defensive.Priority > card.Priority);
+        Assert.True(defensive.Priority > resurrection.Priority);
+        Assert.True(defensive.Priority < healing.Priority);
+        Assert.True(defensive.Priority < damage.Priority);
     }
 
     [Fact]
-    public void DefensiveModule_HasFourthHighestPriority()
+    public void HealingModule_CollectsBeforeBuffsAndDamage()
     {
         var card = new CardModule();
         var resurrection = new ResurrectionModule();
@@ -66,9 +68,11 @@ public class ModulePriorityTests
         var buff = new BuffModule();
         var damage = new DamageModule();
 
-        Assert.True(defensive.Priority > healing.Priority);
-        Assert.True(defensive.Priority < buff.Priority);
-        Assert.True(defensive.Priority < damage.Priority);
+        Assert.True(healing.Priority > card.Priority);
+        Assert.True(healing.Priority > resurrection.Priority);
+        Assert.True(healing.Priority > defensive.Priority);
+        Assert.True(healing.Priority < buff.Priority);
+        Assert.True(healing.Priority < damage.Priority);
     }
 
     [Fact]
@@ -76,9 +80,11 @@ public class ModulePriorityTests
     {
         var buff = new BuffModule();
         var defensive = new DefensiveModule();
+        var healing = new HealingModule();
         var damage = new DamageModule();
 
         Assert.True(buff.Priority > defensive.Priority);
+        Assert.True(buff.Priority > healing.Priority);
         Assert.True(buff.Priority < damage.Priority);
     }
 
@@ -175,8 +181,8 @@ public class ModulePriorityTests
         {
             "Card",
             "Resurrection",
-            "Healing",
             "Defensive",
+            "Healing",
             "Buff",
             "Damage",
         };
@@ -189,8 +195,8 @@ public class ModulePriorityTests
     [Theory]
     [InlineData(typeof(CardModule), 3)]
     [InlineData(typeof(ResurrectionModule), 5)]
+    [InlineData(typeof(DefensiveModule), 8)]
     [InlineData(typeof(HealingModule), 10)]
-    [InlineData(typeof(DefensiveModule), 20)]
     [InlineData(typeof(BuffModule), 30)]
     [InlineData(typeof(DamageModule), 50)]
     public void Module_HasExpectedPriority(Type moduleType, int expectedPriority)

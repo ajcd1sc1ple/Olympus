@@ -36,7 +36,7 @@ public sealed class DamageModule : ITerpsichoreModule
 
     public void CollectCandidates(ITerpsichoreContext context, RotationScheduler scheduler, bool isMoving)
     {
-        if (!context.InCombat)
+        if (!context.InCombat && context.TargetingService.GetUserEnemyTarget() == null)
         {
             context.Debug.DamageState = "Not in combat";
             return;
@@ -46,7 +46,7 @@ public sealed class DamageModule : ITerpsichoreModule
             context.Debug.DamageState = "Dancing...";
             return;
         }
-        if (context.TargetingService.IsDamageTargetingPaused())
+        if (context.TargetingService.IsDamageTargetingPaused(context.Player))
         {
             context.Debug.DamageState = "Paused (no target)";
             return;

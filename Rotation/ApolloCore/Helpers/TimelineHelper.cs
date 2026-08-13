@@ -1,3 +1,4 @@
+using System;
 using Olympus.Services.Prediction;
 using Olympus.Timeline;
 using Olympus.Timeline.Models;
@@ -61,6 +62,99 @@ public static class TimelineHelper
     }
 
     /// <summary>
+    /// Raidwide check for GCD heal/shield prep only.
+    /// Uses <see cref="ITimelineService.NextRaidwideForGcdHealPrep"/> which ignores BossMod
+    /// cast-hints (bomb/bait AoEs). Falls back to pattern detection like
+    /// <see cref="IsRaidwideImminent"/>.
+    /// </summary>
+    public static bool IsRaidwideImminentForGcdHealPrep(
+        ITimelineService? timelineService,
+        IBossMechanicDetector? bossMechanicDetector,
+        Configuration config,
+        out string source,
+        float? windowSeconds = null)
+    {
+        source = "None";
+        var window = windowSeconds ?? config.Healing.RaidwidePreparationWindow;
+
+        if (config.Timeline.EnableTimelinePredictions &&
+            timelineService is not null &&
+            timelineService.IsActive &&
+            timelineService.Confidence >= config.Timeline.TimelineConfidenceThreshold)
+        {
+            var nextRaidwide = timelineService.NextRaidwideForGcdHealPrep;
+            if (nextRaidwide.HasValue &&
+                nextRaidwide.Value.SecondsUntil <= window &&
+                nextRaidwide.Value.SecondsUntil > 0)
+            {
+                source = "Timeline";
+                return true;
+            }
+        }
+
+        if (config.Healing.EnableMechanicAwareness && bossMechanicDetector is not null)
+        {
+            if (bossMechanicDetector.IsRaidwideImminent)
+            {
+                source = "Pattern";
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Stack / shared party-damage check for GCD AoE shield prep (Succor, Helios, E.Prognosis).
+    /// Uses BossMod <c>PredictedDamageType.Shared</c> (e.g. Burning Coals) or Cactbot Stack entries.
+    /// Does not use Raidwide cast-hints (spreads/bait AoEs).
+    /// </summary>
+    public static bool IsStackImminentForGcdHealPrep(
+        ITimelineService? timelineService,
+        Configuration config,
+        out string source,
+        float? windowSeconds = null)
+    {
+        source = "None";
+        var window = windowSeconds ?? config.Healing.RaidwidePreparationWindow;
+
+        if (config.Timeline.EnableTimelinePredictions &&
+            timelineService is not null &&
+            timelineService.IsActive &&
+            timelineService.Confidence >= config.Timeline.TimelineConfidenceThreshold)
+        {
+            var nextStack = timelineService.NextStackForGcdHealPrep;
+            if (nextStack.HasValue &&
+                nextStack.Value.SecondsUntil <= window &&
+                nextStack.Value.SecondsUntil > 0)
+            {
+                source = "Stack";
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// True when GCD AoE shields should be applied: imminent raidwide (Timeline/Cactbot) or
+    /// stack / shared damage (BossMod Shared / Cactbot Stack).
+    /// </summary>
+    public static bool IsAoEShieldPrepImminent(
+        ITimelineService? timelineService,
+        IBossMechanicDetector? bossMechanicDetector,
+        Configuration config,
+        out string source,
+        float? windowSeconds = null)
+    {
+        if (IsRaidwideImminentForGcdHealPrep(
+                timelineService, bossMechanicDetector, config, out source, windowSeconds))
+            return true;
+
+        return IsStackImminentForGcdHealPrep(timelineService, config, out source, windowSeconds);
+    }
+
+    /// <summary>
     /// Checks if a tank buster is imminent using the best available source.
     /// Returns true if timeline predicts a tank buster within the preparation window,
     /// or if the BossMechanicDetector (fallback) predicts one.
@@ -95,6 +189,44 @@ public static class TimelineHelper
         }
 
         // Priority 2: Boss mechanic detector (reactive pattern detection)
+        if (config.Healing.EnableMechanicAwareness && bossMechanicDetector is not null)
+        {
+            if (bossMechanicDetector.IsTankBusterImminent)
+            {
+                source = "Pattern";
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Tank-buster check for GCD shield prep only (ignores BossMod cast-hints).
+    /// </summary>
+    public static bool IsTankBusterImminentForGcdHealPrep(
+        ITimelineService? timelineService,
+        IBossMechanicDetector? bossMechanicDetector,
+        Configuration config,
+        out string source)
+    {
+        source = "None";
+
+        if (config.Timeline.EnableTimelinePredictions &&
+            timelineService is not null &&
+            timelineService.IsActive &&
+            timelineService.Confidence >= config.Timeline.TimelineConfidenceThreshold)
+        {
+            var nextTankBuster = timelineService.NextTankBusterForGcdHealPrep;
+            if (nextTankBuster.HasValue &&
+                nextTankBuster.Value.SecondsUntil <= config.Healing.TankBusterPreparationWindow &&
+                nextTankBuster.Value.SecondsUntil > 0)
+            {
+                source = "Timeline";
+                return true;
+            }
+        }
+
         if (config.Healing.EnableMechanicAwareness && bossMechanicDetector is not null)
         {
             if (bossMechanicDetector.IsTankBusterImminent)
@@ -237,8 +369,45 @@ public static class TimelineHelper
         var fightName = timelineService.FightName;
 
         if (timelineService.Confidence >= config.Timeline.TimelineConfidenceThreshold)
-            return $"{fightName} [{confidencePercent:F0}%]";
+        {
+            var source = timelineService.NextRaidwide?.Name.StartsWith("BossMod", StringComparison.Ordinal) == true
+                || timelineService.NextTankBuster?.Name.StartsWith("BossMod", StringComparison.Ordinal) == true
+                ? "BossMod"
+                : "Cactbot";
+            return $"{fightName} [{confidencePercent:F0}% · {source}]";
+        }
 
         return $"{fightName} [Low: {confidencePercent:F0}%]";
+    }
+
+    /// <summary>
+    /// Resolves the tank (or best available party member) for tank-buster mitigation/shield prep.
+    /// Prefers <see cref="IPartyHelper.FindTankInParty"/>; falls back to any living non-self
+    /// party member so full-HP tanks are still shielded when role detection is unavailable.
+    /// Does not use FindLowestHpPartyMember (which skips full-HP targets).
+    /// </summary>
+    /// <summary>
+    /// Resolves the tank (or best available party member) for tank-buster mitigation/shield prep.
+    /// Prefers an explicit tank when provided; falls back to any living non-self party member
+    /// so full-HP tanks are still shielded (FindLowestHpPartyMember skips full HP).
+    /// </summary>
+    public static Dalamud.Game.ClientState.Objects.Types.IBattleChara? ResolveTankBusterTarget(
+        Dalamud.Game.ClientState.Objects.Types.IBattleChara? tank,
+        System.Collections.Generic.IEnumerable<Dalamud.Game.ClientState.Objects.Types.IBattleChara> partyMembers,
+        uint playerEntityId)
+    {
+        if (tank != null)
+            return tank;
+
+        foreach (var member in partyMembers)
+        {
+            if (member.IsDead)
+                continue;
+            if (member.EntityId == playerEntityId)
+                continue;
+            return member;
+        }
+
+        return null;
     }
 }

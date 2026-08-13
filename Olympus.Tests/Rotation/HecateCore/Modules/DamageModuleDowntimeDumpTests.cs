@@ -232,7 +232,7 @@ public sealed class DamageModuleDowntimeDumpTests : IDisposable
     private static Mock<ITargetingService> CreateTargetingWith(IBattleNpc enemy)
     {
         var t = new Mock<ITargetingService>();
-        t.Setup(x => x.IsDamageTargetingPaused()).Returns(false);
+        t.Setup(x => x.IsDamageTargetingPaused(It.IsAny<Dalamud.Game.ClientState.Objects.SubKinds.IPlayerCharacter?>())).Returns(false);
         t.Setup(x => x.FindEnemy(
                 It.IsAny<EnemyTargetingStrategy>(),
                 It.IsAny<float>(),

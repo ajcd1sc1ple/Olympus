@@ -9,7 +9,11 @@ namespace Olympus.Rotation.Common.Modules;
 public abstract class BaseDefensiveModule<TContext> : IHealerRotationModule<TContext>
     where TContext : IHealerRotationContext
 {
-    public virtual int Priority => 20; // After healing, before buffs
+    /// <summary>
+    /// Collect before Healing (10). Candidate priorities still enforce
+    /// timeline mit → heal → DPS at dispatch time.
+    /// </summary>
+    public virtual int Priority => 8;
     public virtual string Name => "Defensive";
 
     #region Abstract Methods - Must be implemented by job-specific modules

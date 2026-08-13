@@ -46,10 +46,10 @@ public class ModulePriorityTests
     }
 
     [Fact]
-    public void DefensiveModule_HasPriority20()
+    public void DefensiveModule_HasPriority8()
     {
         var module = new DefensiveModule();
-        Assert.Equal(20, module.Priority);
+        Assert.Equal(8, module.Priority);
     }
 
     [Fact]
@@ -117,13 +117,13 @@ public class ModulePriorityTests
     }
 
     [Fact]
-    public void HealingModule_HasHigherPriorityThan_DefensiveModule()
+    public void DefensiveModule_HasHigherPriorityThan_HealingModule()
     {
         var healing = new HealingModule();
         var defensive = new DefensiveModule();
 
-        Assert.True(healing.Priority < defensive.Priority,
-            $"HealingModule priority ({healing.Priority}) should be less than DefensiveModule priority ({defensive.Priority})");
+        Assert.True(defensive.Priority < healing.Priority,
+            $"DefensiveModule priority ({defensive.Priority}) should be less than HealingModule priority ({healing.Priority})");
     }
 
     [Fact]

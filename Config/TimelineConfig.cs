@@ -16,6 +16,13 @@ public sealed class TimelineConfig
     public bool EnableTimelinePredictions { get; set; } = true;
 
     /// <summary>
+    /// When true, use BossMod Reborn for raidwide/tankbuster: cast-hint when a cast is
+    /// predicted, otherwise Timeline. Cactbot embedded timelines are fallback only.
+    /// Default on.
+    /// </summary>
+    public bool EnableBossModTimelineIntegration { get; set; } = true;
+
+    /// <summary>
     /// Minimum timeline confidence required to trust predictions.
     /// Timeline confidence decays over time since the last sync point.
     /// Valid range: 0.5 to 1.0.
@@ -28,9 +35,9 @@ public sealed class TimelineConfig
     }
 
     /// <summary>
-    /// When enabled, rotations skip cast-time damage GCDs when a raidwide or
-    /// tank buster is predicted to hit before the cast would complete.
-    /// Applies to all roles with cast-time damage spells.
+    /// Legacy toggle retained for config compatibility. Cast-time damage is no longer
+    /// blocked before raidwides/tankbusters (cast-through for all roles). Tank-buster
+    /// mitigations still use timeline predictions independently.
     /// </summary>
-    public bool EnableMechanicAwareCasting { get; set; } = true;
+    public bool EnableMechanicAwareCasting { get; set; } = false;
 }

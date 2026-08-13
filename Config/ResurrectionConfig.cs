@@ -1,3 +1,5 @@
+using System;
+
 namespace Olympus.Config;
 
 /// <summary>
@@ -48,6 +50,12 @@ public sealed class ResurrectionConfig
     /// <summary>
     /// Minimum MP percentage required before attempting to raise (0.0 - 1.0).
     /// Default 0.25 means 25% MP minimum (2400 MP for Raise + buffer).
+    /// Clamped to 0.10–0.50 to match the config UI slider.
     /// </summary>
-    public float RaiseMpThreshold { get; set; } = 0.25f;
+    private float _raiseMpThreshold = 0.25f;
+    public float RaiseMpThreshold
+    {
+        get => _raiseMpThreshold;
+        set => _raiseMpThreshold = Math.Clamp(value, 0.10f, 0.50f);
+    }
 }

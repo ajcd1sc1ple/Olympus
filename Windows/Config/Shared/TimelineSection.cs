@@ -38,6 +38,16 @@ public sealed class TimelineSection
 
         ConfigUIHelpers.BeginIndent();
 
+        ConfigUIHelpers.Toggle(
+            Loc.T(LocalizedStrings.Timeline.EnableBossModIntegration, "Use BossMod timeline"),
+            () => config.Timeline.EnableBossModTimelineIntegration,
+            v => config.Timeline.EnableBossModTimelineIntegration = v,
+            Loc.T(LocalizedStrings.Timeline.EnableBossModIntegrationDesc,
+                "When BossMod Reborn has an active encounter module, use cast-hint timing when available, otherwise BossMod.Timeline. Embedded Cactbot timelines are fallback only. Untargetable holds stay Cactbot-only."),
+            save);
+
+        ConfigUIHelpers.Spacing();
+
         config.Timeline.TimelineConfidenceThreshold = ConfigUIHelpers.ThresholdSliderSmall(
             Loc.T(LocalizedStrings.Timeline.ConfidenceThreshold, "Confidence Threshold"),
             config.Timeline.TimelineConfidenceThreshold, 50f, 100f,
@@ -51,7 +61,7 @@ public sealed class TimelineSection
             () => config.Timeline.EnableMechanicAwareCasting,
             v => config.Timeline.EnableMechanicAwareCasting = v,
             Loc.T(LocalizedStrings.Timeline.EnableMechanicAwareCastingDesc,
-                "Stop hardcast damage spells when a raidwide or tank buster will hit before the cast completes. Applies to all roles."),
+                "Deprecated: casting is no longer blocked before raidwides/tankbusters (caused GCD downtime). Timeline tank-buster mitigations still fire normally."),
             save);
 
         ConfigUIHelpers.EndIndent();

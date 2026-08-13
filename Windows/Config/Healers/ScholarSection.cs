@@ -63,6 +63,17 @@ public sealed class ScholarSection
             ConfigUIHelpers.Toggle(Loc.T(LocalizedStrings.Scholar.EnableProtraction, "Enable Protraction"), () => config.Scholar.EnableProtraction, v => config.Scholar.EnableProtraction = v, null, save,
                 actionId: SCHActions.Protraction.ActionId);
 
+            if (config.Scholar.EnableProtraction)
+            {
+                ConfigUIHelpers.BeginIndent();
+                config.Scholar.ProtractionThreshold = ConfigUIHelpers.ThresholdSliderSmall(
+                    Loc.T(LocalizedStrings.Scholar.ProtractionThreshold, "Protraction Threshold"),
+                    config.Scholar.ProtractionThreshold, 40f, 90f,
+                    Loc.T(LocalizedStrings.Scholar.ProtractionThresholdDesc, "Apply Protraction when target HP is at or below this %."),
+                    save, v => config.Scholar.ProtractionThreshold = v);
+                ConfigUIHelpers.EndIndent();
+            }
+
             ConfigUIHelpers.Toggle(Loc.T(LocalizedStrings.Scholar.EnableRecitation, "Enable Recitation"), () => config.Scholar.EnableRecitation, v => config.Scholar.EnableRecitation = v, null, save,
                 actionId: SCHActions.Recitation.ActionId);
 

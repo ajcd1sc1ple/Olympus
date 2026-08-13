@@ -35,12 +35,12 @@ public sealed class DamageModule : IPrometheusModule
 
     public void CollectCandidates(IPrometheusContext context, RotationScheduler scheduler, bool isMoving)
     {
-        if (!context.InCombat)
+        if (!context.InCombat && context.TargetingService.GetUserEnemyTarget() == null)
         {
             context.Debug.DamageState = "Not in combat";
             return;
         }
-        if (context.TargetingService.IsDamageTargetingPaused())
+        if (context.TargetingService.IsDamageTargetingPaused(context.Player))
         {
             context.Debug.DamageState = "Paused (no target)";
             return;

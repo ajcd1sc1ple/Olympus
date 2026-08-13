@@ -48,7 +48,8 @@ public sealed class DamageModule : IKratosModule
         var level = player.Level;
 
         // Pre-combat: Form Shift for opener (countdown-gated) then Meditation for Chakra build.
-        if (!context.InCombat)
+        // Hostile hard target → fall through to DPS (do not wait for server InCombat).
+        if (!context.InCombat && context.TargetingService.GetUserEnemyTarget() == null)
         {
             if (context.Configuration.PrePull.EnablePrePullActions
                 && context.Configuration.Monk.EnablePreCombatFormShift
@@ -80,7 +81,7 @@ public sealed class DamageModule : IKratosModule
             return;
         }
 
-        if (context.TargetingService.IsDamageTargetingPaused())
+        if (context.TargetingService.IsDamageTargetingPaused(context.Player))
         {
             context.Debug.DamageState = "Paused (no target)";
             return;

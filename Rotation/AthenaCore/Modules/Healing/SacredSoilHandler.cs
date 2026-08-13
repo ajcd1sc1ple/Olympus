@@ -7,6 +7,7 @@ using Olympus.Rotation.ApolloCore.Helpers;
 using Olympus.Rotation.AthenaCore.Abilities;
 using Olympus.Rotation.AthenaCore.Context;
 using Olympus.Rotation.Common.Scheduling;
+using static Olympus.Rotation.Common.Scheduling.HealerSchedulerPriorities;
 using Olympus.Services.Training;
 
 namespace Olympus.Rotation.AthenaCore.Modules.Healing;
@@ -79,8 +80,9 @@ public sealed class SacredSoilHandler : IHealingHandler
         var capturedRaidwideImminent = raidwideImminent;
         var capturedBurstImminent = burstImminent;
         var capturedPosition = player.Position;
+        var soilPriority = Mitigation(raidwideImminent || burstImminent, reactivePriority: Priority);
 
-        scheduler.PushGroundTargetedOgcd(AthenaAbilities.SacredSoil, capturedPosition, priority: Priority,
+        scheduler.PushGroundTargetedOgcd(AthenaAbilities.SacredSoil, capturedPosition, priority: soilPriority,
             onDispatched: _ =>
             {
                 context.AetherflowService.ConsumeStack();

@@ -6,6 +6,7 @@ using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
 using Dalamud.Utility;
 using Olympus.Config;
+using Olympus.Ipc;
 using Olympus.Localization;
 using Olympus.Services;
 using Olympus.Services.Movement;
@@ -77,8 +78,8 @@ public sealed class ConfigWindow : Window
     private readonly MovementSection movementSection;
     private readonly DebugDisplaySection debugDisplaySection;
 
-    public ConfigWindow(Configuration configuration, Action saveConfiguration, UpdateCheckerService updateCheckerService, ITextureProvider textureProvider, IRMIWalkHookService hookService)
-        : base(Loc.T(LocalizedStrings.Config.WindowTitle, "Olympus Settings"), ImGuiWindowFlags.NoCollapse)
+    public ConfigWindow(Configuration configuration, Action saveConfiguration, UpdateCheckerService updateCheckerService, ITextureProvider textureProvider, IRMIWalkHookService hookService, IOrbwalkerIpc? orbwalkerIpc = null, IObjectTable? objectTable = null, IBossModPresence? bossModPresence = null)
+        : base(Loc.T(LocalizedStrings.Config.WindowTitle, "MyOlympus Settings"), ImGuiWindowFlags.NoCollapse)
     {
         this.configuration = configuration;
         this.saveConfiguration = saveConfiguration;
@@ -88,7 +89,7 @@ public sealed class ConfigWindow : Window
         sidebar = new ConfigSidebar(textureProvider);
 
         // Initialize all section renderers
-        generalSection = new GeneralSection(configuration, saveConfiguration);
+        generalSection = new GeneralSection(configuration, saveConfiguration, orbwalkerIpc, objectTable);
         healerSharedSection = new HealerSharedSection(configuration, saveConfiguration);
         whiteMageSection = new WhiteMageSection(configuration, saveConfiguration);
         scholarSection = new ScholarSection(configuration, saveConfiguration);
@@ -122,7 +123,7 @@ public sealed class ConfigWindow : Window
         partyCoordinationSection = new PartyCoordinationSection(configuration, saveConfiguration);
         consumablesSection = new ConsumablesSection(configuration, saveConfiguration);
         prePullSection = new PrePullSection(configuration, saveConfiguration);
-        movementSection = new MovementSection(configuration, saveConfiguration, hookService);
+        movementSection = new MovementSection(configuration, saveConfiguration, hookService, bossModPresence);
         debugDisplaySection = new DebugDisplaySection(configuration, saveConfiguration);
 
         Size = new Vector2(650, 700);
@@ -568,6 +569,7 @@ public sealed class ConfigWindow : Window
             configuration.ActivePreset        = imported.ActivePreset;
             configuration.MovementTolerance   = imported.MovementTolerance;
             configuration.EnableOnAutoAttack  = imported.EnableOnAutoAttack;
+            configuration.EnableAutoAttackUntilDead = imported.EnableAutoAttackUntilDead;
             configuration.EnableHealing       = imported.EnableHealing;
             configuration.EnableDamage        = imported.EnableDamage;
             configuration.EnableDoT           = imported.EnableDoT;

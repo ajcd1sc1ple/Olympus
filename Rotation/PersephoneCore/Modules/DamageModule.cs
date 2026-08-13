@@ -41,12 +41,14 @@ public sealed class DamageModule : IPersephoneModule
     public unsafe void CollectCandidates(IPersephoneContext context, RotationScheduler scheduler, bool isMoving)
     {
         if (!context.InCombat)
-        {
             TryPushPrePullHardcast(context, scheduler);
+        // Hostile hard target → keep DPS even before server InCombat flips.
+        if (!context.InCombat && context.TargetingService.GetUserEnemyTarget() == null)
+        {
             context.Debug.DamageState = "Not in combat";
             return;
         }
-        if (context.TargetingService.IsDamageTargetingPaused())
+        if (context.TargetingService.IsDamageTargetingPaused(context.Player))
         {
             context.Debug.DamageState = "Paused (no target)";
             return;
@@ -78,9 +80,13 @@ public sealed class DamageModule : IPersephoneModule
 
         var aoeEnabled = context.Configuration.Summoner.EnableAoERotation;
         var aoeThreshold = context.Configuration.Summoner.AoEMinTargets;
-        var rawEnemyCount = context.TargetingService.CountEnemiesInRange(5f, player);
+        // Outburst / Tri-disaster are 25y targeted splash (5y) — do not count at player 5y.
+        var rawEnemyCount = aoeEnabled
+            ? context.TargetingService.FindBestAoETarget(
+                SMNActions.Outburst.Radius, SMNActions.Outburst.Range, player).hitCount
+            : 0;
         context.Debug.NearbyEnemies = rawEnemyCount;
-        var enemyCount = aoeEnabled ? rawEnemyCount : 0;
+        var enemyCount = rawEnemyCount;
         var useAoe = enemyCount >= aoeThreshold;
 
         // Addle (party mit utility)

@@ -897,7 +897,7 @@ public class BuffModuleCollectCandidatesTests
         targeting.Setup(x => x.FindEnemy(
                 It.IsAny<EnemyTargetingStrategy>(), It.IsAny<float>(), It.IsAny<IPlayerCharacter>()))
             .Returns(enemy.Object);
-        targeting.Setup(x => x.IsDamageTargetingPaused()).Returns(false);
+        targeting.Setup(x => x.IsDamageTargetingPaused(It.IsAny<IPlayerCharacter?>())).Returns(false);
         return targeting;
     }
 }

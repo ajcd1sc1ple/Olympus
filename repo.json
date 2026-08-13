@@ -1,21 +1,21 @@
 [
   {
-    "Author": "Rose",
-    "Name": "Olympus",
-    "InternalName": "Olympus",
-    "Punchline": "Intelligent rotation assistant for all combat jobs",
-    "Description": "Olympus: An intelligent rotation assistant supporting all 21 combat jobs with healing, damage, mitigation, burst windows, party coordination, and timeline-aware fight predictions.",
+    "Author": "Rose (fork)",
+    "Name": "MyOlympus",
+    "InternalName": "MyOlympus",
+    "Punchline": "Personal Olympus fork — intelligent rotation assistant for all combat jobs",
+    "Description": "MyOlympus: A personal fork of Olympus supporting all 21 combat jobs with healing, damage, mitigation, burst windows, party coordination, and timeline-aware fight predictions.",
     "ApplicableVersion": "any",
     "CategoryTags": ["jobs"],
-    "RepoUrl": "https://github.com/RoseOfficial/Olympus",
+    "RepoUrl": "https://github.com/ajcd1sc1ple/Olympus",
     "AssemblyVersion": "4.17.2.0",
     "DalamudApiLevel": 15,
     "IconUrl": "",
     "ImageUrls": [],
     "IsHide": false,
     "IsTestingExclusive": false,
-    "DownloadLinkInstall": "https://github.com/RoseOfficial/Olympus/releases/download/v4.17.2/Olympus.zip",
-    "DownloadLinkTesting": "https://github.com/RoseOfficial/Olympus/releases/download/v4.17.2/Olympus.zip",
-    "DownloadLinkUpdate": "https://github.com/RoseOfficial/Olympus/releases/download/v4.17.2/Olympus.zip"
+    "DownloadLinkInstall": "https://github.com/ajcd1sc1ple/Olympus/releases/download/v4.17.2/MyOlympus.zip",
+    "DownloadLinkTesting": "https://github.com/ajcd1sc1ple/Olympus/releases/download/v4.17.2/MyOlympus.zip",
+    "DownloadLinkUpdate": "https://github.com/ajcd1sc1ple/Olympus/releases/download/v4.17.2/MyOlympus.zip"
   }
 ]

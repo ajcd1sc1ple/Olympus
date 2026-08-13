@@ -41,6 +41,15 @@ public sealed class RecitationHandler : IHealingHandler
             _ => false
         };
 
+        // Tank-buster prep: arm Recitation for crit Adlo/Excog even if the configured
+        // priority is raidwide-oriented (Succor/Indom) and party HP is still high.
+        if (!shouldUseRecitation &&
+            TimelineHelper.IsTankBusterImminent(
+                context.TimelineService, context.BossMechanicDetector, context.Configuration, out _))
+        {
+            shouldUseRecitation = ShouldUseExcogitation(context) || ShouldUseSingleTargetHeal(context);
+        }
+
         if (!shouldUseRecitation) return;
 
         var action = SCHActions.Recitation;
@@ -99,6 +108,18 @@ public sealed class RecitationHandler : IHealingHandler
 
         if (player.Level < SCHActions.Excogitation.MinLevel) return false;
 
+        var tankBusterImminent = TimelineHelper.IsTankBusterImminent(
+            context.TimelineService, context.BossMechanicDetector, context.Configuration, out _);
+
+        if (tankBusterImminent)
+        {
+            var tank = TimelineHelper.ResolveTankBusterTarget(
+                context.PartyHelper.FindTankInParty(player),
+                context.PartyHelper.GetAllPartyMembers(player),
+                player.EntityId);
+            return tank != null && !context.StatusHelper.HasExcogitation(tank);
+        }
+
         var target = context.PartyHelper.FindExcogitationTarget(player);
         if (target == null) return false;
 
@@ -119,6 +140,18 @@ public sealed class RecitationHandler : IHealingHandler
     {
         var config = context.Configuration.Scholar;
         var player = context.Player;
+
+        var tankBusterImminent = TimelineHelper.IsTankBusterImminent(
+            context.TimelineService, context.BossMechanicDetector, context.Configuration, out _);
+
+        if (tankBusterImminent)
+        {
+            var tank = TimelineHelper.ResolveTankBusterTarget(
+                context.PartyHelper.FindTankInParty(player),
+                context.PartyHelper.GetAllPartyMembers(player),
+                player.EntityId);
+            return tank != null && !context.StatusHelper.HasGalvanize(tank);
+        }
 
         var target = context.PartyHelper.FindLowestHpPartyMember(player);
         if (target == null) return false;

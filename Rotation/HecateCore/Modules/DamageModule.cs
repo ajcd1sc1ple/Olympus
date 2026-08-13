@@ -42,12 +42,14 @@ public sealed class DamageModule : IHecateModule
     public void CollectCandidates(IHecateContext context, RotationScheduler scheduler, bool isMoving)
     {
         if (!context.InCombat)
-        {
             TryPushPrePullHardcast(context, scheduler);
+        // Hostile hard target → keep DPS even before server InCombat flips.
+        if (!context.InCombat && context.TargetingService.GetUserEnemyTarget() == null)
+        {
             context.Debug.DamageState = "Not in combat";
             return;
         }
-        if (context.TargetingService.IsDamageTargetingPaused())
+        if (context.TargetingService.IsDamageTargetingPaused(context.Player))
         {
             context.Debug.DamageState = "Paused (no target)";
             // During combat downtime (boss jump): push Umbral Soul to maintain ice

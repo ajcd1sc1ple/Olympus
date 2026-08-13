@@ -40,7 +40,7 @@ public sealed class MainWindow : Window
         string version,
         RotationManager rotationManager,
         ITextureProvider textureProvider)
-        : base($"Olympus v{version}", ImGuiWindowFlags.NoCollapse)
+        : base($"MyOlympus v{version}", ImGuiWindowFlags.NoCollapse)
     {
         this.configuration = configuration;
         this.saveConfiguration = saveConfiguration;

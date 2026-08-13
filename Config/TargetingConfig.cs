@@ -24,11 +24,11 @@ public sealed class TargetingConfig
     public int TargetCacheTtlMs { get; set; } = 100;
 
     /// <summary>
-    /// When true, all damage targeting is suppressed while the player has no selected target.
-    /// This is the primary safeguard for gaze mechanics (drop target to look away) and for
-    /// any case where the player wants Olympus to stop attacking. Default ON.
+    /// When true, historically suppressed damage after a sustained null hard target (gaze).
+    /// Retained for config compatibility; damage targeting no longer stalls on null target —
+    /// dual-boss swaps and Tab retargets were freezing DPS. Default OFF.
     /// </summary>
-    public bool PauseWhenNoTarget { get; set; } = true;
+    public bool PauseWhenNoTarget { get; set; } = false;
 
     /// <summary>
     /// When true, damage module execution is suppressed while the player has any
@@ -59,8 +59,9 @@ public sealed class TargetingConfig
 
     /// <summary>
     /// When true, the fallback that retargets to LowestHp when CurrentTarget/FocusTarget
-    /// strategies fail is disabled — a missing current target simply stops damage. This
-    /// makes "drop target" a hard pause for players using explicit-target strategies.
+    /// strategies fail is disabled after the hard target stays null past the pause grace
+    /// window — a sustained missing current target simply stops damage (gaze / disengage).
+    /// Brief Tab-retarget gaps still fall back so DPS does not stall mid-pack.
     /// Default ON.
     /// </summary>
     public bool StrictCurrentTargetStrategy { get; set; } = true;

@@ -149,8 +149,22 @@ public static class LocalizedStrings
         public const string CombatBehaviorHeader = "config.general.combat_behavior_header";
         public const string StartOnAutoAttack = "config.general.start_on_auto_attack";
         public const string StartOnAutoAttackDesc = "config.general.start_on_auto_attack_desc";
+        public const string EnableAutoAttackUntilDead = "config.general.enable_auto_attack_until_dead";
+        public const string EnableAutoAttackUntilDeadDesc = "config.general.enable_auto_attack_until_dead_desc";
         public const string EnablePingCompensation = "config.general.enable_ping_compensation";
         public const string EnablePingCompensationDesc = "config.general.enable_ping_compensation_desc";
+        public const string EnableOrbwalkerIntegration = "config.general.enable_orbwalker_integration";
+        public const string EnableOrbwalkerIntegrationDesc = "config.general.enable_orbwalker_integration_desc";
+        public const string OrbwalkerHelp = "config.general.orbwalker_help";
+        public const string OrbwalkerStatusDisabled = "config.general.orbwalker_status_disabled";
+        public const string OrbwalkerStatusNotInstalled = "config.general.orbwalker_status_not_installed";
+        public const string OrbwalkerStatusPluginOff = "config.general.orbwalker_status_plugin_off";
+        public const string OrbwalkerStatusJobOff = "config.general.orbwalker_status_job_off";
+        public const string OrbwalkerStatusActive = "config.general.orbwalker_status_active";
+        public const string OrbwalkerStatusActiveNoForceStop = "config.general.orbwalker_status_active_no_force_stop";
+        public const string OrbwalkerStatusActiveNoBuffer = "config.general.orbwalker_status_active_no_buffer";
+        public const string EnablePostCancelHardcastHold = "config.general.enable_post_cancel_hardcast_hold";
+        public const string EnablePostCancelHardcastHoldDesc = "config.general.enable_post_cancel_hardcast_hold_desc";
     }
 
     /// <summary>Keys for window behavior settings.</summary>
@@ -259,6 +273,11 @@ public static class LocalizedStrings
         public const string HookUnavailableBanner = "movement.hook_unavailable";
         public const string EnableTrashAoEAvoidance = "movement.enable_avoidance";
         public const string EnableTrashAoEAvoidanceDesc = "movement.enable_avoidance_desc";
+        public const string BossModDetected = "movement.bossmod_detected";
+        public const string SuppressWhenBossMod = "movement.suppress_when_bossmod";
+        public const string SuppressWhenBossModDesc = "movement.suppress_when_bossmod_desc";
+        public const string ForceDespiteBossMod = "movement.force_despite_bossmod";
+        public const string ForceDespiteBossModDesc = "movement.force_despite_bossmod_desc";
         public const string EnableAutoInteract = "movement.enable_interact";
         public const string EnableAutoInteractDesc = "movement.enable_interact_desc";
         public const string ReactionDelayLabel = "movement.reaction_delay";
@@ -501,6 +520,17 @@ public static class LocalizedStrings
 
         // Advanced healing settings
         public const string AdvancedHealingSettings = "config.job.whm.advanced_healing_settings";
+        public const string TriageMovedNote = "config.job.whm.triage_moved_note";
+        public const string EnableAggressiveLilyFlush = "config.job.whm.enable_aggressive_lily_flush";
+        public const string EnableAggressiveLilyFlushDesc = "config.job.whm.enable_aggressive_lily_flush_desc";
+        public const string EnableLilyCapPrevention = "config.job.whm.enable_lily_cap_prevention";
+        public const string EnableLilyCapPreventionDesc = "config.job.whm.enable_lily_cap_prevention_desc";
+        public const string EnableProactiveBenediction = "config.job.whm.enable_proactive_benediction";
+        public const string EnableProactiveBenedictionDesc = "config.job.whm.enable_proactive_benediction_desc";
+        public const string ProactiveBenedictionHp = "config.job.whm.proactive_benediction_hp";
+        public const string ProactiveBenedictionHpDesc = "config.job.whm.proactive_benediction_hp_desc";
+        public const string ProactiveBenedictionDps = "config.job.whm.proactive_benediction_dps";
+        public const string ProactiveBenedictionDpsDesc = "config.job.whm.proactive_benediction_dps_desc";
     }
 
     /// <summary>Keys for Scholar specific settings.</summary>
@@ -537,6 +567,8 @@ public static class LocalizedStrings
         public const string EnableExcogitation = "config.job.sch.enable_excogitation";
         public const string EnableIndomitability = "config.job.sch.enable_indomitability";
         public const string EnableProtraction = "config.job.sch.enable_protraction";
+        public const string ProtractionThreshold = "config.job.sch.protraction_threshold";
+        public const string ProtractionThresholdDesc = "config.job.sch.protraction_threshold_desc";
         public const string EnableRecitation = "config.job.sch.enable_recitation";
         public const string EnableSacredSoil = "config.job.sch.enable_sacred_soil";
         public const string RecitationTarget = "config.job.sch.recitation_target";
@@ -723,6 +755,7 @@ public static class LocalizedStrings
         // Cards
         public const string EnableCards = "config.job.ast.enable_cards";
         public const string EnableCardsDesc = "config.job.ast.enable_cards_desc";
+        public const string CardTargetingNote = "config.job.ast.card_targeting_note";
         public const string CardStrategy = "config.job.ast.card_strategy";
         public const string CardStrategyDpsFocused = "config.job.ast.card_strategy_dps_focused";
         public const string CardStrategyBalanced = "config.job.ast.card_strategy_balanced";
@@ -976,6 +1009,26 @@ public static class LocalizedStrings
         public const string BurstSection = "config.job.healer_shared.burst_section";
         public const string EnableBurstPooling = "config.job.healer_shared.enable_burst_pooling";
         public const string EnableBurstPoolingDesc = "config.job.healer_shared.enable_burst_pooling_desc";
+
+        // Triage (shared across healers)
+        public const string TriageSection = "config.job.healer_shared.triage_section";
+        public const string UseDamageBasedTriage = "config.job.healer_shared.use_damage_based_triage";
+        public const string UseDamageBasedTriageDesc = "config.job.healer_shared.use_damage_based_triage_desc";
+        public const string TriagePreset = "config.job.healer_shared.triage_preset";
+        public const string TriagePresetBalanced = "config.job.healer_shared.triage_preset_balanced";
+        public const string TriagePresetTankFocus = "config.job.healer_shared.triage_preset_tank_focus";
+        public const string TriagePresetSpreadDamage = "config.job.healer_shared.triage_preset_spread_damage";
+        public const string TriagePresetRaidWide = "config.job.healer_shared.triage_preset_raidwide";
+        public const string TriagePresetCustom = "config.job.healer_shared.triage_preset_custom";
+
+        // Co-healer awareness
+        public const string CoHealerSection = "config.job.healer_shared.co_healer_section";
+        public const string EnableCoHealerAwareness = "config.job.healer_shared.enable_co_healer_awareness";
+        public const string EnableCoHealerAwarenessDesc = "config.job.healer_shared.enable_co_healer_awareness_desc";
+        public const string CoHealerActiveWindow = "config.job.healer_shared.co_healer_active_window";
+        public const string CoHealerActiveWindowDesc = "config.job.healer_shared.co_healer_active_window_desc";
+        public const string CoHealerPendingHealThreshold = "config.job.healer_shared.co_healer_pending_heal_threshold";
+        public const string CoHealerPendingHealThresholdDesc = "config.job.healer_shared.co_healer_pending_heal_threshold_desc";
     }
 
     /// <summary>Keys for the shared Timeline Integration settings section.</summary>
@@ -984,6 +1037,8 @@ public static class LocalizedStrings
         public const string SectionHeader = "config.timeline.section_header";
         public const string EnablePredictions = "config.timeline.enable_predictions";
         public const string EnablePredictionsDesc = "config.timeline.enable_predictions_desc";
+        public const string EnableBossModIntegration = "config.timeline.enable_bossmod_integration";
+        public const string EnableBossModIntegrationDesc = "config.timeline.enable_bossmod_integration_desc";
         public const string ConfidenceThreshold = "config.timeline.confidence_threshold";
         public const string ConfidenceThresholdDesc = "config.timeline.confidence_threshold_desc";
         public const string EnableMechanicAwareCasting = "config.timeline.enable_mechanic_aware_casting";

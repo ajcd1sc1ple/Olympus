@@ -5,6 +5,7 @@ using Olympus.Rotation.ApolloCore.Helpers;
 using Olympus.Rotation.AsclepiusCore.Abilities;
 using Olympus.Rotation.AsclepiusCore.Context;
 using Olympus.Rotation.Common.Scheduling;
+using static Olympus.Rotation.Common.Scheduling.HealerSchedulerPriorities;
 using Olympus.Services.Training;
 
 namespace Olympus.Rotation.AsclepiusCore.Modules.Healing;
@@ -35,6 +36,12 @@ public sealed class KeracholeHandler : IHealingHandler
 
         var raidwideImminent = TimelineHelper.IsRaidwideImminent(
             context.TimelineService, context.BossMechanicDetector, context.Configuration, out var raidwideSource);
+        // Stack / shared party damage (e.g. Burning Coals) should also dump Kerachole.
+        if (!raidwideImminent)
+        {
+            raidwideImminent = TimelineHelper.IsAoEShieldPrepImminent(
+                context.TimelineService, context.BossMechanicDetector, context.Configuration, out raidwideSource);
+        }
 
         var burstImminent = false;
         var coordConfig = context.Configuration.PartyCoordination;
@@ -71,8 +78,9 @@ public sealed class KeracholeHandler : IHealingHandler
         var capturedStacks = context.AddersgallStacks;
         var capturedRaidwideImminent = raidwideImminent;
         var capturedBurstImminent = burstImminent;
+        var keraPriority = Mitigation(raidwideImminent || burstImminent, reactivePriority: Priority);
 
-        scheduler.PushOgcd(AsclepiusAbilities.Kerachole, player.GameObjectId, priority: Priority,
+        scheduler.PushOgcd(AsclepiusAbilities.Kerachole, player.GameObjectId, priority: keraPriority,
             onDispatched: _ =>
             {
                 partyCoord?.OnGroundEffectPlaced(action.ActionId, player.Position);

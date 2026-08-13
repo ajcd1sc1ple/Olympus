@@ -197,4 +197,48 @@ public class ExcogitationHandlerTests
         Assert.DoesNotContain(scheduler.InspectOgcdQueue(),
             c => c.Behavior == AthenaAbilities.Excogitation);
     }
+
+    [Fact]
+    public void CollectCandidates_TankBusterImminentFullHp_PushesExcogitation()
+    {
+        var config = AthenaTestContext.CreateDefaultScholarConfiguration();
+        config.Scholar.EnableExcogitation = true;
+        config.Scholar.ExcogitationThreshold = 0.60f;
+        config.Scholar.AetherflowReserve = 1;
+        config.Timeline.EnableTimelinePredictions = true;
+        config.Timeline.TimelineConfidenceThreshold = 0.8f;
+
+        var tank = MockBuilders.CreateMockBattleChara(entityId: 10u, currentHp: 50000, maxHp: 50000);
+        tank.Setup(x => x.StatusList).Returns((Dalamud.Game.ClientState.Statuses.StatusList?)null!);
+        var partyHelper = new TestableAthenaPartyHelper(new List<IBattleChara> { tank.Object }, config);
+
+        var actionService = MockBuilders.CreateMockActionService(canExecuteGcd: true, canExecuteOgcd: false);
+        actionService.Setup(x => x.IsActionReady(SCHActions.Excogitation.ActionId)).Returns(true);
+
+        var aetherflow = AthenaTestContext.CreateMockAetherflowService(currentStacks: 3);
+
+        var prediction = new Olympus.Timeline.Models.MechanicPrediction(
+            2f, Olympus.Timeline.Models.TimelineEntryType.TankBuster, "TestTankBuster", 1f);
+        var timeline = new Moq.Mock<Olympus.Timeline.ITimelineService>();
+        timeline.Setup(s => s.IsActive).Returns(true);
+        timeline.Setup(s => s.Confidence).Returns(1f);
+        timeline.Setup(s => s.NextTankBuster).Returns(prediction);
+
+        var context = AthenaTestContext.Create(
+            config: config,
+            partyHelper: partyHelper,
+            actionService: actionService,
+            aetherflowService: aetherflow,
+            timelineService: timeline,
+            level: 100,
+            canExecuteGcd: true,
+            canExecuteOgcd: false);
+
+        var scheduler = SchedulerFactory.CreateForTest(actionService);
+
+        _handler.CollectCandidates(context, scheduler, isMoving: false);
+
+        Assert.Contains(scheduler.InspectOgcdQueue(),
+            c => c.Behavior == AthenaAbilities.Excogitation && c.TargetId == tank.Object.GameObjectId);
+    }
 }

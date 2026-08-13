@@ -179,4 +179,42 @@ public class ProtractionHandlerTests
         Assert.DoesNotContain(scheduler.InspectOgcdQueue(),
             c => c.Behavior == AthenaAbilities.Protraction);
     }
+
+    [Fact]
+    public void CollectCandidates_TankBusterImminentFullHp_PushesProtraction()
+    {
+        var config = AthenaTestContext.CreateDefaultScholarConfiguration();
+        config.Scholar.EnableProtraction = true;
+        config.Timeline.EnableTimelinePredictions = true;
+        config.Timeline.TimelineConfidenceThreshold = 0.8f;
+
+        var tank = MockBuilders.CreateMockBattleChara(entityId: 10u, currentHp: 50000, maxHp: 50000);
+        var partyHelper = new TestableAthenaPartyHelper(new List<IBattleChara> { tank.Object }, config);
+
+        var actionService = MockBuilders.CreateMockActionService(canExecuteGcd: true, canExecuteOgcd: false);
+        actionService.Setup(x => x.IsActionReady(SCHActions.Protraction.ActionId)).Returns(true);
+
+        var prediction = new Olympus.Timeline.Models.MechanicPrediction(
+            2f, Olympus.Timeline.Models.TimelineEntryType.TankBuster, "TestTankBuster", 1f);
+        var timeline = new Moq.Mock<Olympus.Timeline.ITimelineService>();
+        timeline.Setup(s => s.IsActive).Returns(true);
+        timeline.Setup(s => s.Confidence).Returns(1f);
+        timeline.Setup(s => s.NextTankBuster).Returns(prediction);
+
+        var context = AthenaTestContext.Create(
+            config: config,
+            partyHelper: partyHelper,
+            actionService: actionService,
+            timelineService: timeline,
+            level: 100,
+            canExecuteGcd: true,
+            canExecuteOgcd: false);
+
+        var scheduler = SchedulerFactory.CreateForTest(actionService);
+
+        _handler.CollectCandidates(context, scheduler, isMoving: false);
+
+        Assert.Contains(scheduler.InspectOgcdQueue(),
+            c => c.Behavior == AthenaAbilities.Protraction && c.TargetId == tank.Object.GameObjectId);
+    }
 }

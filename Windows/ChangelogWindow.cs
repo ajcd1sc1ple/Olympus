@@ -11,7 +11,7 @@ namespace Olympus.Windows;
 /// </summary>
 public sealed class ChangelogWindow : Window
 {
-    public ChangelogWindow() : base("Olympus Changelog", ImGuiWindowFlags.None)
+    public ChangelogWindow() : base("MyOlympus Changelog", ImGuiWindowFlags.None)
     {
         Size = new Vector2(500, 600);
         SizeCondition = ImGuiCond.FirstUseEver;

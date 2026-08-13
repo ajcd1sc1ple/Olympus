@@ -54,11 +54,11 @@ public sealed class DamageModule : BaseDamageModule<IAsclepiusContext>, IAsclepi
     public void CollectCandidates(IAsclepiusContext context, RotationScheduler scheduler, bool isMoving)
     {
         if (!context.InCombat)
-        {
             TryPushPrePullHardcast(context, scheduler);
+        // Hostile hard target → keep DPS even before server InCombat flips.
+        if (!context.InCombat && context.TargetingService.GetUserEnemyTarget() == null)
             return;
-        }
-        if (context.TargetingService.IsDamageTargetingPaused()) { SetDpsState(context, "Paused (no target)"); return; }
+        if (context.TargetingService.IsDamageTargetingPaused(context.Player)) { SetDpsState(context, "Paused (no target)"); return; }
         if (context.Configuration.Targeting.SuppressDamageOnForcedMovement
             && PlayerSafetyHelper.IsForcedMovementActive(context.Player))
         {
@@ -67,6 +67,15 @@ public sealed class DamageModule : BaseDamageModule<IAsclepiusContext>, IAsclepi
         }
 
         TryPushPsyche(context, scheduler);
+
+        var (_, lowestHp, _) = context.PartyHelper.CalculatePartyHealthMetrics(context.Player);
+        if (HealingUrgency.ShouldSuppressDamageGcds(
+                context.Configuration.EnableHealing, lowestHp, context.Configuration.Healing))
+        {
+            SetDpsState(context, "Holding: GCD emergency heal");
+            return;
+        }
+
         TryPushPhlegma(context, scheduler);
         TryDirectDispatchEukrasiaForDoT(context);
         TryPushDoT(context, scheduler);
@@ -320,10 +329,9 @@ public sealed class DamageModule : BaseDamageModule<IAsclepiusContext>, IAsclepi
         var aoeAction = GetAoEDamageAction(context);
         if (aoeAction == null) return;
 
-        var aoeCastTime = context.HasSwiftcast ? 0f : aoeAction.CastTime;
-        if (MechanicCastGate.ShouldBlock(context, aoeCastTime)) { SetAoEDpsState(context, "Holding: mechanic imminent"); return; }
+        // Healers cast AoE damage through predicted mechanics.
 
-        var enemyCount = context.TargetingService.CountEnemiesInRange(aoeAction.Radius, context.Player);
+        var enemyCount = CountEnemiesForAoE(context, aoeAction);
         SetAoEDpsEnemyCount(context, enemyCount);
         if (enemyCount < AoEMinTargets(context)) { SetAoEDpsState(context, $"{enemyCount} < {AoEMinTargets(context)} min"); return; }
 
@@ -351,9 +359,7 @@ public sealed class DamageModule : BaseDamageModule<IAsclepiusContext>, IAsclepi
         if (isMoving) return;
 
         var action = GetSingleTargetAction(context, isMoving);
-
-        var stCastTime = context.HasSwiftcast ? 0f : action.CastTime;
-        if (MechanicCastGate.ShouldBlock(context, stCastTime)) { SetDpsState(context, "Holding: mechanic imminent"); return; }
+        // Cast through timeline mechanics; Toxikon covers movement only.
 
         var target = context.TargetingService.FindEnemy(
             context.Configuration.Targeting.EnemyStrategy, action.Range, context.Player);

@@ -68,15 +68,16 @@ public abstract class BaseTankDamageModule<TContext> : IRotationModule<TContext>
             return false;
         }
 
-        // Phase 2: Combat check
-        if (!context.InCombat)
+        // Phase 2: Combat check — allow hard-target pull before server InCombat flips
+        // (same bootstrap as DPS/healer BaseDamageModule).
+        if (!context.InCombat && context.TargetingService.GetUserEnemyTarget() == null)
         {
             SetDamageState(context, "Not in combat");
             return false;
         }
 
         // Phase 2b: Gaze-safety — player has no target, PauseWhenNoTarget is on.
-        if (context.TargetingService.IsDamageTargetingPaused())
+        if (context.TargetingService.IsDamageTargetingPaused(context.Player))
         {
             SetDamageState(context, "Paused (no target)");
             return false;

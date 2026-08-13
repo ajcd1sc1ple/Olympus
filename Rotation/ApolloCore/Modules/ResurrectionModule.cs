@@ -157,7 +157,8 @@ public sealed class ResurrectionModule : BaseResurrectionModule<IApolloContext>,
         if (mpPercent < config.Resurrection.RaiseMpThreshold) return;
         if (!context.ActionService.IsActionReady(SwiftcastAction.ActionId)) return;
 
-        scheduler.PushOgcd(ApolloAbilities.Swiftcast, player.GameObjectId, priority: 1);
+        var prepPriority = RaiseModeEvaluator.GetRaisePrepPriority(config.Resurrection.RaiseMode);
+        scheduler.PushOgcd(ApolloAbilities.Swiftcast, player.GameObjectId, priority: prepPriority);
     }
 
     private void TryPushRaise(IApolloContext context, RotationScheduler scheduler, bool isMoving)
@@ -185,6 +186,14 @@ public sealed class ResurrectionModule : BaseResurrectionModule<IApolloContext>,
             return;
         }
 
+        var (avgHp, lowestHp, _) = context.PartyHelper.CalculatePartyHealthMetrics(player);
+        if (!RaiseModeEvaluator.TryGetRaiseGcdPriority(
+                config.Resurrection.RaiseMode, avgHp, lowestHp, out var raisePriority, out var skipReason))
+        {
+            SetRaiseState(context, skipReason ?? "Raise deferred");
+            return;
+        }
+
         var hasSwiftcast = HasSwiftcast(context);
 
         if (hasSwiftcast)
@@ -196,7 +205,7 @@ public sealed class ResurrectionModule : BaseResurrectionModule<IApolloContext>,
                 return;
             }
 
-            scheduler.PushGcd(ApolloAbilities.Raise, target.GameObjectId, priority: 1,
+            scheduler.PushGcd(ApolloAbilities.Raise, target.GameObjectId, priority: raisePriority,
                 onDispatched: _ =>
                 {
                     var note = GetRaiseSuccessNote(context, hasSwiftcast: true);
@@ -221,7 +230,7 @@ public sealed class ResurrectionModule : BaseResurrectionModule<IApolloContext>,
                     return;
                 }
 
-                scheduler.PushGcd(ApolloAbilities.Raise, target.GameObjectId, priority: 1,
+                scheduler.PushGcd(ApolloAbilities.Raise, target.GameObjectId, priority: raisePriority,
                     onDispatched: _ =>
                     {
                         var note = GetRaiseSuccessNote(context, hasSwiftcast: false);

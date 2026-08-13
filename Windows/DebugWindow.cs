@@ -56,7 +56,7 @@ public sealed class DebugWindow : Window
     ];
 
     public DebugWindow(DebugService debugService, Configuration configuration, ITimelineService? timelineService = null, SmartAoETab? smartAoETab = null)
-        : base(Loc.T(LocalizedStrings.Debug.WindowTitle, "Olympus Debug"), ImGuiWindowFlags.NoSavedSettings)
+        : base(Loc.T(LocalizedStrings.Debug.WindowTitle, "MyOlympus Debug"), ImGuiWindowFlags.NoSavedSettings)
     {
         _debugService = debugService;
         _configuration = configuration;

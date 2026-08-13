@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using Dalamud.Plugin.Services;
+using Olympus.Ipc;
 using Olympus.Services;
+using Olympus.Services.AutoAttack;
 
 namespace Olympus.Rotation;
 
@@ -150,12 +152,43 @@ public sealed class RotationFactory
 
             if (canResolve)
             {
-                return (IRotation)constructor.Invoke(args);
+                var rotation = (IRotation)constructor.Invoke(args)!;
+                AttachOrbwalkerIfNeeded(rotation);
+                AttachAutoAttackIfNeeded(rotation);
+                AttachBossModIfNeeded(rotation);
+                return rotation;
             }
         }
 
         _log.Warning("No suitable constructor found for rotation {Type}", rotationType.Name);
         return null;
+    }
+
+    private void AttachOrbwalkerIfNeeded(IRotation rotation)
+    {
+        if (rotation is IOrbwalkerCastIntegration orbwalkerConsumer
+            && _services.TryGet<IOrbwalkerIpc>(out var orbwalkerIpc))
+        {
+            orbwalkerConsumer.AttachOrbwalkerIpc(orbwalkerIpc);
+        }
+    }
+
+    private void AttachAutoAttackIfNeeded(IRotation rotation)
+    {
+        if (rotation is IAutoAttackHoldIntegration aaConsumer
+            && _services.TryGet<IAutoAttackService>(out var autoAttackService))
+        {
+            aaConsumer.AttachAutoAttackService(autoAttackService);
+        }
+    }
+
+    private void AttachBossModIfNeeded(IRotation rotation)
+    {
+        if (rotation is Olympus.Rotation.Common.Helpers.IBossModPresenceIntegration bossModConsumer
+            && _services.TryGet<Olympus.Services.Movement.IBossModPresence>(out var presence))
+        {
+            bossModConsumer.AttachBossModPresence(presence);
+        }
     }
 
     /// <summary>

@@ -34,8 +34,13 @@ public sealed class AoEHealHandler : IHealingHandler
         var (count, _) = context.PartyHelper.CountPartyMembersNeedingAoEHeal(player, 0);
         var (avgHp, _, injuredCount) = context.PartyHelper.CalculatePartyHealthMetrics(player);
 
-        var raidwideImminent = TimelineHelper.IsRaidwideImminent(
+        var raidwideImminent = TimelineHelper.IsAoEShieldPrepImminent(
             context.TimelineService, context.BossMechanicDetector, context.Configuration, out _);
+
+        // If Succor shields are already up, do not keep re-casting on a sticky timeline
+        // prediction — that starves Broil/DoT until the prediction clears.
+        if (raidwideImminent && context.StatusHelper.HasGalvanize(player))
+            raidwideImminent = false;
 
         var shouldUse = (avgHp <= config.AoEHealThreshold && count >= config.AoEHealMinTargets) || raidwideImminent;
         if (!shouldUse) return;

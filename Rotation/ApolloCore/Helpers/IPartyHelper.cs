@@ -13,11 +13,6 @@ namespace Olympus.Rotation.ApolloCore.Helpers;
 public interface IPartyHelper : ISpikeTargetSource
 {
     /// <summary>
-    /// Yields all party members (player + party list or Trust NPCs).
-    /// </summary>
-    IEnumerable<IBattleChara> GetAllPartyMembers(IPlayerCharacter player, bool includeDead = false);
-
-    /// <summary>
     /// Finds the tank in the party.
     /// </summary>
     IBattleChara? FindTankInParty(IPlayerCharacter player);
@@ -31,11 +26,6 @@ public interface IPartyHelper : ISpikeTargetSource
     /// Finds a dead party member that needs resurrection.
     /// </summary>
     IBattleChara? FindDeadPartyMemberNeedingRaise(IPlayerCharacter player);
-
-    /// <summary>
-    /// Gets predicted HP percent for a target.
-    /// </summary>
-    float GetHpPercent(IBattleChara target);
 
     /// <summary>
     /// Calculates party health metrics for defensive cooldown decisions.
