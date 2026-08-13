@@ -122,8 +122,7 @@ public sealed class DamageModule : BaseDamageModule<IAstraeaContext>, IAstraeaMo
             }
         }
 
-        var dotCastTime = context.HasSwiftcast ? 0f : dotAction.CastTime;
-        if (MechanicCastGate.ShouldBlock(context, dotCastTime)) { SetDpsState(context, "DoT: mechanic imminent"); return; }
+        // Healers cast DoT through predicted mechanics (no idle GCD holes).
 
         var dotStatusId = GetDoTStatusId(context);
         if (dotStatusId == 0) return;
@@ -149,8 +148,7 @@ public sealed class DamageModule : BaseDamageModule<IAstraeaContext>, IAstraeaMo
         var aoeAction = GetAoEDamageAction(context);
         if (aoeAction == null) return;
 
-        var aoeCastTime = context.HasSwiftcast ? 0f : aoeAction.CastTime;
-        if (MechanicCastGate.ShouldBlock(context, aoeCastTime)) { SetAoEDpsState(context, "Holding: mechanic imminent"); return; }
+        // Healers cast AoE damage through predicted mechanics.
 
         var enemyCount = context.TargetingService.CountEnemiesInRange(aoeAction.Radius, context.Player);
         SetAoEDpsEnemyCount(context, enemyCount);
@@ -180,8 +178,7 @@ public sealed class DamageModule : BaseDamageModule<IAstraeaContext>, IAstraeaMo
         if (isMoving && !context.HasLightspeed) return;
 
         var action = GetSingleTargetAction(context, isMoving);
-        var stCastTime = context.HasSwiftcast || context.HasLightspeed ? 0f : action.CastTime;
-        if (MechanicCastGate.ShouldBlock(context, stCastTime)) { SetDpsState(context, "Holding: mechanic imminent"); return; }
+        // Healers cast ST damage through predicted mechanics; Lightspeed covers movement.
 
         var target = context.TargetingService.FindEnemy(
             context.Configuration.Targeting.EnemyStrategy, action.Range, context.Player);

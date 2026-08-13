@@ -320,8 +320,7 @@ public sealed class DamageModule : BaseDamageModule<IAsclepiusContext>, IAsclepi
         var aoeAction = GetAoEDamageAction(context);
         if (aoeAction == null) return;
 
-        var aoeCastTime = context.HasSwiftcast ? 0f : aoeAction.CastTime;
-        if (MechanicCastGate.ShouldBlock(context, aoeCastTime)) { SetAoEDpsState(context, "Holding: mechanic imminent"); return; }
+        // Healers cast AoE damage through predicted mechanics.
 
         var enemyCount = context.TargetingService.CountEnemiesInRange(aoeAction.Radius, context.Player);
         SetAoEDpsEnemyCount(context, enemyCount);
@@ -351,9 +350,7 @@ public sealed class DamageModule : BaseDamageModule<IAsclepiusContext>, IAsclepi
         if (isMoving) return;
 
         var action = GetSingleTargetAction(context, isMoving);
-
-        var stCastTime = context.HasSwiftcast ? 0f : action.CastTime;
-        if (MechanicCastGate.ShouldBlock(context, stCastTime)) { SetDpsState(context, "Holding: mechanic imminent"); return; }
+        // Cast through timeline mechanics; Toxikon covers movement only.
 
         var target = context.TargetingService.FindEnemy(
             context.Configuration.Targeting.EnemyStrategy, action.Range, context.Player);

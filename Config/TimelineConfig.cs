@@ -35,9 +35,10 @@ public sealed class TimelineConfig
     }
 
     /// <summary>
-    /// When enabled, rotations skip cast-time damage GCDs when a raidwide or
+    /// When enabled, DPS/tank rotations skip cast-time damage GCDs when a raidwide or
     /// tank buster is predicted to hit before the cast would complete.
-    /// Applies to all roles with cast-time damage spells.
+    /// Healers intentionally keep casting through — they lack reliable stationary
+    /// instant fillers, and holding created empty GCD windows between timeline events.
     /// </summary>
     public bool EnableMechanicAwareCasting { get; set; } = true;
 }

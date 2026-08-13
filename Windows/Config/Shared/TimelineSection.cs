@@ -61,7 +61,7 @@ public sealed class TimelineSection
             () => config.Timeline.EnableMechanicAwareCasting,
             v => config.Timeline.EnableMechanicAwareCasting = v,
             Loc.T(LocalizedStrings.Timeline.EnableMechanicAwareCastingDesc,
-                "Stop hardcast damage spells when a raidwide or tank buster will hit before the cast completes. Applies to all roles."),
+                "Stop hardcast damage spells when a raidwide or tank buster will hit before the cast completes. Applies to DPS/tank cast-time damage; healers keep casting through (use instant fillers only while moving)."),
             save);
 
         ConfigUIHelpers.EndIndent();
