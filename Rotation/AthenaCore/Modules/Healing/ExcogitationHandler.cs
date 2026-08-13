@@ -34,14 +34,21 @@ public sealed class ExcogitationHandler : IHealingHandler
         var hasRecitation = context.StatusHelper.HasRecitation(player);
         if (!hasRecitation && context.AetherflowService.CurrentStacks <= config.AetherflowReserve) return;
 
-        var target = context.PartyHelper.FindExcogitationTarget(player);
+        var tankBusterImminent = TimelineHelper.IsTankBusterImminent(
+            context.TimelineService, context.BossMechanicDetector, context.Configuration, out _);
+
+        // On tank-buster prep, force Excog onto the tank even at full HP.
+        var target = tankBusterImminent
+            ? TimelineHelper.ResolveTankBusterTarget(
+                context.PartyHelper.FindTankInParty(player),
+                context.PartyHelper.GetAllPartyMembers(player),
+                player.EntityId)
+            : context.PartyHelper.FindExcogitationTarget(player);
         if (target == null) return;
+        if (tankBusterImminent && context.StatusHelper.HasExcogitation(target)) return;
         if (context.HealingCoordination.IsTargetReserved(target.EntityId, context.PartyCoordinationService)) return;
 
         var hpPercent = context.PartyHelper.GetHpPercent(target);
-
-        var tankBusterImminent = TimelineHelper.IsTankBusterImminent(
-            context.TimelineService, context.BossMechanicDetector, context.Configuration, out _);
 
         if (hpPercent > config.ExcogitationThreshold && !tankBusterImminent) return;
 

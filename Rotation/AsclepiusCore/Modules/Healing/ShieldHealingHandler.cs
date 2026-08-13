@@ -32,10 +32,12 @@ public sealed class ShieldHealingHandler : IHealingHandler
 
         var raidwideImminent = TimelineHelper.IsRaidwideImminent(
             context.TimelineService, context.BossMechanicDetector, context.Configuration, out _);
+        var tankBusterImminent = TimelineHelper.IsTankBusterImminent(
+            context.TimelineService, context.BossMechanicDetector, context.Configuration, out _);
 
         if (context.HasEukrasia)
         {
-            TryPushEukrasianHealSpell(context, scheduler, raidwideImminent);
+            TryPushEukrasianHealSpell(context, scheduler, raidwideImminent, tankBusterImminent);
             return;
         }
 
@@ -56,7 +58,19 @@ public sealed class ShieldHealingHandler : IHealingHandler
         }
 
         var shouldActivateForSt = config.EnableEukrasianDiagnosis &&
-                                  lowestHp < config.EukrasianDiagnosisThreshold;
+                                  (lowestHp < config.EukrasianDiagnosisThreshold || tankBusterImminent);
+
+        // Tank-buster ST shield arming: skip if the tank already has E.Diagnosis.
+        if (shouldActivateForSt && tankBusterImminent && lowestHp >= config.EukrasianDiagnosisThreshold &&
+            config.AvoidOverwritingShields)
+        {
+            var tank = TimelineHelper.ResolveTankBusterTarget(
+                context.PartyHelper.FindTankInParty(player),
+                context.PartyHelper.GetAllPartyMembers(player),
+                player.EntityId);
+            if (tank != null && AsclepiusStatusHelper.HasEukrasianDiagnosisShield(tank))
+                shouldActivateForSt = false;
+        }
 
         if (!shouldActivateForAoE && !shouldActivateForSt) return;
 
@@ -71,15 +85,21 @@ public sealed class ShieldHealingHandler : IHealingHandler
         }
     }
 
-    private void TryPushEukrasianHealSpell(IAsclepiusContext context, RotationScheduler scheduler, bool raidwideImminent)
+    private void TryPushEukrasianHealSpell(
+        IAsclepiusContext context,
+        RotationScheduler scheduler,
+        bool raidwideImminent,
+        bool tankBusterImminent)
     {
         var config = context.Configuration.Sage;
         var player = context.Player;
 
         var (avgHp, lowestHp, injuredCount) = context.PartyHelper.CalculatePartyHealthMetrics(player);
 
-        // Prefer AoE if multiple injured or raidwide is imminent (proactive shields before the hit)
-        if (config.EnableEukrasianPrognosis && (raidwideImminent || injuredCount >= config.AoEHealMinTargets))
+        // Prefer AoE if multiple injured or raidwide is imminent (proactive shields before the hit).
+        // Tank-buster prep prefers single-target E.Diagnosis on the tank over party Prognosis.
+        if (config.EnableEukrasianPrognosis && !tankBusterImminent &&
+            (raidwideImminent || injuredCount >= config.AoEHealMinTargets))
         {
             // Skip if party already has E.Prognosis shields -- avoids wasting a GCD and 1000 MP
             // re-casting identical shields mid-raidwide phase.
@@ -156,10 +176,15 @@ public sealed class ShieldHealingHandler : IHealingHandler
             return;
         }
 
-        // Single-target shield
+        // Single-target shield (tank on TB even at full HP)
         if (config.EnableEukrasianDiagnosis)
         {
-            var target = context.PartyHelper.FindLowestHpPartyMember(player);
+            var target = tankBusterImminent
+                ? TimelineHelper.ResolveTankBusterTarget(
+                    context.PartyHelper.FindTankInParty(player),
+                    context.PartyHelper.GetAllPartyMembers(player),
+                    player.EntityId)
+                : context.PartyHelper.FindLowestHpPartyMember(player);
             if (target == null) return;
             if (context.HealingCoordination.IsTargetReserved(target.EntityId, context.PartyCoordinationService))
             {
@@ -173,10 +198,14 @@ public sealed class ShieldHealingHandler : IHealingHandler
             }
 
             var hpPercent = target.MaxHp > 0 ? (float)target.CurrentHp / target.MaxHp : 1f;
+            if (hpPercent >= config.EukrasianDiagnosisThreshold && !tankBusterImminent)
+                return;
+
             var action = SGEActions.EukrasianDiagnosis;
 
             var capturedTarget = target;
             var capturedHpPercent = hpPercent;
+            var capturedTb = tankBusterImminent;
 
             scheduler.PushGcd(AsclepiusAbilities.EukrasianDiagnosis, target.GameObjectId, priority: Priority,
                 onDispatched: _ =>
@@ -186,7 +215,7 @@ public sealed class ShieldHealingHandler : IHealingHandler
                         capturedTarget.EntityId, context.PartyCoordinationService, healAmount, action.ActionId, 0);
 
                     context.Debug.PlannedAction = action.Name;
-                    context.Debug.PlanningState = "E.Diagnosis";
+                    context.Debug.PlanningState = capturedTb ? "TB E.Diagnosis" : "E.Diagnosis";
                     context.Debug.EukrasianDiagnosisState = "Executing";
 
                     if (context.TrainingService?.IsTrainingEnabled == true)
@@ -200,12 +229,14 @@ public sealed class ShieldHealingHandler : IHealingHandler
                             ActionName = "Eukrasian Diagnosis",
                             Category = "Healing",
                             TargetName = targetName,
-                            ShortReason = $"E.Diagnosis on {targetName} at {capturedHpPercent:P0}",
+                            ShortReason = capturedTb
+                                ? $"E.Diagnosis on {targetName} before tankbuster"
+                                : $"E.Diagnosis on {targetName} at {capturedHpPercent:P0}",
                             DetailedReason = $"Eukrasian Diagnosis placed on {targetName} at {capturedHpPercent:P0} HP. Provides 300 potency heal + 540 potency shield. The shield absorbs incoming damage, making this very efficient for tank healing before busters!",
                             Factors = new[]
                             {
                                 $"Target HP: {capturedHpPercent:P0}",
-                                "300 potency heal + 540 potency shield",
+                                capturedTb ? "Tank buster imminent — max shield prep" : "300 potency heal + 540 potency shield",
                                 "Instant cast (via Eukrasia)",
                                 "900 MP cost",
                             },
@@ -217,7 +248,7 @@ public sealed class ShieldHealingHandler : IHealingHandler
                             },
                             Tip = "E.Diagnosis is amazing for tanks before busters! The shield absorbs the hit, and any leftover becomes healing when it expires. Generates Addersting when the shield breaks!",
                             ConceptId = SgeConcepts.EukrasianDiagnosisUsage,
-                            Priority = ExplanationPriority.Normal,
+                            Priority = capturedTb ? ExplanationPriority.High : ExplanationPriority.Normal,
                         });
                     }
                 });

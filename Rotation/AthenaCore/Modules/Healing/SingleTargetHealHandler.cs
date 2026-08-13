@@ -1,8 +1,10 @@
 using System;
+using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.ClientState.Objects.Types;
 using Olympus.Config;
 using Olympus.Data;
 using Olympus.Models.Action;
+using Olympus.Rotation.ApolloCore.Helpers;
 using Olympus.Rotation.AthenaCore.Abilities;
 using Olympus.Rotation.AthenaCore.Context;
 using Olympus.Rotation.Common.Helpers;
@@ -11,6 +13,11 @@ using Olympus.Services.Training;
 
 namespace Olympus.Rotation.AthenaCore.Modules.Healing;
 
+/// <summary>
+/// Adloquium / Manifestation / Physick.
+/// On timeline tank-busters, forces Adlo/Manifestation on the tank even at full HP
+/// so Galvanize is applied before impact.
+/// </summary>
 public sealed class SingleTargetHealHandler : IHealingHandler
 {
     public int Priority => 20;
@@ -25,6 +32,30 @@ public sealed class SingleTargetHealHandler : IHealingHandler
 
         if (!config.EnableAdloquium && !config.EnablePhysick) return;
 
+        var tankBusterImminent = TimelineHelper.IsTankBusterImminent(
+            context.TimelineService, context.BossMechanicDetector, context.Configuration, out _);
+
+        if (tankBusterImminent && config.EnableAdloquium)
+        {
+            // Max shield dump on the tank before the buster — ignore HP thresholds.
+            var tank = TimelineHelper.ResolveTankBusterTarget(
+                context.PartyHelper.FindTankInParty(player),
+                context.PartyHelper.GetAllPartyMembers(player),
+                player.EntityId);
+            if (tank == null) return;
+            if (context.HealingCoordination.IsTargetReserved(tank.EntityId, context.PartyCoordinationService))
+                return;
+            if (context.StatusHelper.HasGalvanize(tank)) return;
+            if (config.AvoidOverwritingSageShields && HasSageShield(context, tank)) return;
+
+            var tbHp = context.PartyHelper.GetHpPercent(tank);
+            if (!TrySelectAdlo(context, config, player, tank, out var tbAction, out var tbBehavior))
+                return;
+
+            PushHeal(context, scheduler, config, tbAction, tbBehavior, tank, tbHp, tankBusterImminent: true, Priority);
+            return;
+        }
+
         var target = context.Configuration.Healing.UseDamageIntakeTriage
             ? context.PartyHelper.FindMostEndangeredPartyMember(
                 player, context.DamageIntakeService, 0, context.DamageTrendService, context.ShieldTrackingService)
@@ -37,27 +68,11 @@ public sealed class SingleTargetHealHandler : IHealingHandler
         ActionDefinition? action = null;
         AbilityBehavior? behavior = null;
 
-        if (config.EnableAdloquium && context.FairyStateManager.IsSeraphOrSeraphismActive && player.Level >= SCHActions.Manifestation.MinLevel)
+        if (config.EnableAdloquium && hpPercent <= config.AdloquiumThreshold &&
+            TrySelectAdlo(context, config, player, target, out var adloAction, out var adloBehavior))
         {
-            if (hpPercent <= config.AdloquiumThreshold)
-            {
-                if (!config.AvoidOverwritingSageShields || !HasSageShield(context, target))
-                {
-                    action = SCHActions.Manifestation;
-                    behavior = AthenaAbilities.Manifestation;
-                }
-            }
-        }
-        else if (config.EnableAdloquium && player.Level >= SCHActions.Adloquium.MinLevel && hpPercent <= config.AdloquiumThreshold)
-        {
-            if (!context.StatusHelper.HasGalvanize(target))
-            {
-                if (!config.AvoidOverwritingSageShields || !HasSageShield(context, target))
-                {
-                    action = SCHActions.Adloquium;
-                    behavior = AthenaAbilities.Adloquium;
-                }
-            }
+            action = adloAction;
+            behavior = adloBehavior;
         }
 
         if (action == null && config.EnablePhysick && hpPercent <= config.PhysickThreshold)
@@ -76,11 +91,58 @@ public sealed class SingleTargetHealHandler : IHealingHandler
                 context.Configuration.Healing.CoHealerPendingHealThreshold))
             return;
 
+        PushHeal(context, scheduler, config, action, behavior, target, hpPercent, tankBusterImminent: false, Priority);
+    }
+
+    private static bool TrySelectAdlo(
+        IAthenaContext context,
+        ScholarConfig config,
+        IPlayerCharacter player,
+        IBattleChara target,
+        out ActionDefinition action,
+        out AbilityBehavior behavior)
+    {
+        action = null!;
+        behavior = null!;
+
+        if (context.FairyStateManager.IsSeraphOrSeraphismActive && player.Level >= SCHActions.Manifestation.MinLevel)
+        {
+            if (config.AvoidOverwritingSageShields && HasSageShield(context, target))
+                return false;
+            action = SCHActions.Manifestation;
+            behavior = AthenaAbilities.Manifestation;
+            return true;
+        }
+
+        if (player.Level < SCHActions.Adloquium.MinLevel)
+            return false;
+        if (context.StatusHelper.HasGalvanize(target))
+            return false;
+        if (config.AvoidOverwritingSageShields && HasSageShield(context, target))
+            return false;
+
+        action = SCHActions.Adloquium;
+        behavior = AthenaAbilities.Adloquium;
+        return true;
+    }
+
+    private static void PushHeal(
+        IAthenaContext context,
+        RotationScheduler scheduler,
+        ScholarConfig config,
+        ActionDefinition action,
+        AbilityBehavior behavior,
+        IBattleChara target,
+        float hpPercent,
+        bool tankBusterImminent,
+        int priority)
+    {
         var capturedAction = action;
         var capturedTarget = target;
         var capturedHpPercent = hpPercent;
+        var capturedTb = tankBusterImminent;
 
-        scheduler.PushGcd(behavior, target.GameObjectId, priority: Priority,
+        scheduler.PushGcd(behavior, target.GameObjectId, priority: priority,
             onDispatched: _ =>
             {
                 var healAmount = capturedAction.HealPotency * 10;
@@ -89,12 +151,13 @@ public sealed class SingleTargetHealHandler : IHealingHandler
                     capturedTarget.EntityId, context.PartyCoordinationService, healAmount, capturedAction.ActionId, castTimeMs);
 
                 context.Debug.PlannedAction = capturedAction.Name;
-                context.Debug.PlanningState = "Single Heal";
+                context.Debug.PlanningState = capturedTb ? "TB Adlo" : "Single Heal";
 
                 if (context.TrainingService?.IsTrainingEnabled == true)
                 {
                     var targetName = capturedTarget.Name?.TextValue ?? "Unknown";
-                    var isAdlo = capturedAction.ActionId == SCHActions.Adloquium.ActionId || capturedAction.ActionId == SCHActions.Manifestation.ActionId;
+                    var isAdlo = capturedAction.ActionId == SCHActions.Adloquium.ActionId ||
+                                 capturedAction.ActionId == SCHActions.Manifestation.ActionId;
                     var isPhysick = capturedAction.ActionId == SCHActions.Physick.ActionId;
 
                     string shortReason;
@@ -104,14 +167,16 @@ public sealed class SingleTargetHealHandler : IHealingHandler
 
                     if (isAdlo)
                     {
-                        shortReason = $"{capturedAction.Name} on {targetName} at {capturedHpPercent:P0}";
+                        shortReason = capturedTb
+                            ? $"{capturedAction.Name} on {targetName} before tankbuster"
+                            : $"{capturedAction.Name} on {targetName} at {capturedHpPercent:P0}";
                         factors = new[]
                         {
                             $"Target HP: {capturedHpPercent:P0}",
                             $"Threshold: {config.AdloquiumThreshold:P0}",
-                            "Provides heal + Galvanize shield",
+                            capturedTb ? "Tank buster imminent — max shield prep" : "Provides heal + Galvanize shield",
                             "Shield can crit for Catalyze bonus",
-                            $"Target had no existing shield",
+                            capturedTb ? "Applied regardless of HP" : "Target had no existing shield",
                         };
                         tip = "Adloquium is your primary single-target GCD heal. The shield is valuable before damage. Critical Adlos create massive shields with Catalyze!";
                         conceptId = SchConcepts.AdloquiumUsage;
@@ -146,12 +211,14 @@ public sealed class SingleTargetHealHandler : IHealingHandler
                         Category = "Healing",
                         TargetName = targetName,
                         ShortReason = shortReason,
-                        DetailedReason = $"{capturedAction.Name} on {targetName} at {capturedHpPercent:P0} HP. {(isAdlo ? "Adloquium provides 300 potency heal plus a 540 potency Galvanize shield (or 810 with crit Catalyze). " : "Physick provides 450 potency heal but no shield. It's SCH's weakest GCD heal option. ")}GCD heals should be used sparingly - prefer oGCD heals when available.",
+                        DetailedReason = $"{capturedAction.Name} on {targetName} at {capturedHpPercent:P0} HP. {(isAdlo ? "Adloquium provides 300 potency heal plus a 540 potency Galvanize shield (or 810 with crit Catalyze). " : "Physick provides 450 potency heal but no shield. It's SCH's weakest GCD heal option. ")}{(capturedTb ? "Used proactively before predicted tank buster. " : "")}GCD heals should be used sparingly - prefer oGCD heals when available.",
                         Factors = factors,
                         Alternatives = alternatives,
                         Tip = tip,
                         ConceptId = conceptId,
-                        Priority = capturedHpPercent < 0.3f ? ExplanationPriority.High : ExplanationPriority.Normal,
+                        Priority = capturedTb || capturedHpPercent < 0.3f
+                            ? ExplanationPriority.High
+                            : ExplanationPriority.Normal,
                     });
 
                     context.TrainingService.RecordConceptApplication(conceptId, wasSuccessful: true);

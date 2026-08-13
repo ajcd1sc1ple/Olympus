@@ -16,6 +16,7 @@ using Olympus.Services.Party;
 using Olympus.Services.Prediction;
 using Olympus.Services.Targeting;
 using Olympus.Tests.Mocks;
+using Olympus.Timeline;
 
 namespace Olympus.Tests.Rotation.AstraeaCore;
 
@@ -38,6 +39,7 @@ public static class AstraeaTestContext
         bool isStarPlaced = false,
         Mock<ITargetingService>? targetingService = null,
         Mock<IBossMechanicDetector>? bossMechanicDetector = null,
+        Mock<ITimelineService>? timelineService = null,
         byte level = 90,
         uint currentHp = 50000,
         uint maxHp = 50000,
@@ -140,6 +142,7 @@ public static class AstraeaTestContext
             cooldownPlanner.Object,
             healingSpellSelector.Object,
             bossMechanicDetector: bossMechanicDetector?.Object,
+            timelineService: timelineService?.Object,
             countdownRemaining: countdownRemaining,
             debugState: debugState ?? new AstraeaDebugState());
     }

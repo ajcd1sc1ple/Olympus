@@ -248,4 +248,35 @@ public static class TimelineHelper
 
         return $"{fightName} [Low: {confidencePercent:F0}%]";
     }
+
+    /// <summary>
+    /// Resolves the tank (or best available party member) for tank-buster mitigation/shield prep.
+    /// Prefers <see cref="IPartyHelper.FindTankInParty"/>; falls back to any living non-self
+    /// party member so full-HP tanks are still shielded when role detection is unavailable.
+    /// Does not use FindLowestHpPartyMember (which skips full-HP targets).
+    /// </summary>
+    /// <summary>
+    /// Resolves the tank (or best available party member) for tank-buster mitigation/shield prep.
+    /// Prefers an explicit tank when provided; falls back to any living non-self party member
+    /// so full-HP tanks are still shielded (FindLowestHpPartyMember skips full HP).
+    /// </summary>
+    public static Dalamud.Game.ClientState.Objects.Types.IBattleChara? ResolveTankBusterTarget(
+        Dalamud.Game.ClientState.Objects.Types.IBattleChara? tank,
+        System.Collections.Generic.IEnumerable<Dalamud.Game.ClientState.Objects.Types.IBattleChara> partyMembers,
+        uint playerEntityId)
+    {
+        if (tank != null)
+            return tank;
+
+        foreach (var member in partyMembers)
+        {
+            if (member.IsDead)
+                continue;
+            if (member.EntityId == playerEntityId)
+                continue;
+            return member;
+        }
+
+        return null;
+    }
 }

@@ -2,6 +2,7 @@ using System;
 using Olympus.Config;
 using Olympus.Data;
 using Olympus.Models.Action;
+using Olympus.Rotation.ApolloCore.Helpers;
 using Olympus.Rotation.AstraeaCore.Abilities;
 using Olympus.Rotation.AstraeaCore.Context;
 using Olympus.Rotation.Common.Scheduling;
@@ -32,16 +33,26 @@ public sealed class ExaltationHandler : IHealingHandler
         if (player.Level < ASTActions.Exaltation.MinLevel) return;
         if (!context.ActionService.IsActionReady(ASTActions.Exaltation.ActionId)) return;
 
-        var target = context.PartyHelper.FindExaltationTarget(player);
+        var tankBusterImminent = TimelineHelper.IsTankBusterImminent(
+            context.TimelineService, context.BossMechanicDetector, context.Configuration, out _);
+
+        var target = tankBusterImminent
+            ? TimelineHelper.ResolveTankBusterTarget(
+                context.PartyHelper.FindTankInParty(player),
+                context.PartyHelper.GetAllPartyMembers(player),
+                player.EntityId)
+            : context.PartyHelper.FindExaltationTarget(player);
         if (target == null) return;
+        if (context.StatusHelper.HasExaltation(target)) return;
         if (context.HealingCoordination.IsTargetReserved(target.EntityId, context.PartyCoordinationService)) return;
 
         var hpPercent = context.PartyHelper.GetHpPercent(target);
-        if (hpPercent > config.ExaltationThreshold) return;
+        if (hpPercent > config.ExaltationThreshold && !tankBusterImminent) return;
 
         var action = ASTActions.Exaltation;
         var capturedTarget = target;
         var capturedHpPercent = hpPercent;
+        var capturedTb = tankBusterImminent;
 
         scheduler.PushOgcd(AstraeaAbilities.Exaltation, target.GameObjectId, priority: Priority,
             onDispatched: _ =>
@@ -51,18 +62,20 @@ public sealed class ExaltationHandler : IHealingHandler
                     capturedTarget.EntityId, context.PartyCoordinationService, healAmount, action.ActionId, 0);
 
                 context.Debug.PlannedAction = action.Name;
-                context.Debug.ExaltationState = "Used";
+                context.Debug.ExaltationState = capturedTb ? "TB Used" : "Used";
 
                 if (context.TrainingService?.IsTrainingEnabled == true)
                 {
                     var targetName = capturedTarget.Name?.TextValue ?? "Unknown";
                     var isTank = JobRegistry.IsTank(capturedTarget.ClassJob.RowId);
-                    var shortReason = $"Exaltation on {targetName} - {(isTank ? "tankbuster prep" : "damage reduction")}";
+                    var shortReason = capturedTb
+                        ? $"Exaltation on {targetName} before tankbuster"
+                        : $"Exaltation on {targetName} - {(isTank ? "tankbuster prep" : "damage reduction")}";
                     var factors = new[]
                     {
                         $"Target HP: {capturedHpPercent:P0}",
                         $"Threshold: {config.ExaltationThreshold:P0}",
-                        "10% damage reduction for 8s",
+                        capturedTb ? "Tank buster imminent — max mit prep" : "10% damage reduction for 8s",
                         "500 potency heal after 8s",
                         "60s cooldown",
                     };
@@ -75,15 +88,15 @@ public sealed class ExaltationHandler : IHealingHandler
                         Category = "Healing",
                         TargetName = targetName,
                         ShortReason = shortReason,
-                        DetailedReason = $"Exaltation on {targetName} at {capturedHpPercent:P0} HP. Provides 10% damage reduction for 8 seconds, then heals for 500 potency. {(isTank ? "Excellent for tankbusters - the mitigation reduces incoming damage, then the delayed heal tops them off!" : "Good defensive utility even on non-tanks during heavy damage phases.")}",
+                        DetailedReason = $"Exaltation on {targetName} at {capturedHpPercent:P0} HP. Provides 10% damage reduction for 8 seconds, then heals for 500 potency. {(capturedTb || isTank ? "Excellent for tankbusters - the mitigation reduces incoming damage, then the delayed heal tops them off!" : "Good defensive utility even on non-tanks during heavy damage phases.")}",
                         Factors = factors,
                         Alternatives = _alternatives,
                         Tip = "Exaltation is best used proactively on tanks before tankbusters. The 10% mitigation + delayed heal combo is very efficient. Time it so the heal lands when the target actually needs it!",
                         ConceptId = AstConcepts.ExaltationUsage,
-                        Priority = isTank ? ExplanationPriority.High : ExplanationPriority.Normal,
+                        Priority = capturedTb || isTank ? ExplanationPriority.High : ExplanationPriority.Normal,
                     });
 
-                    context.TrainingService?.RecordConceptApplication(AstConcepts.ExaltationUsage, wasSuccessful: true, isTank ? "Tankbuster mitigation" : "Damage reduction applied");
+                    context.TrainingService?.RecordConceptApplication(AstConcepts.ExaltationUsage, wasSuccessful: true, capturedTb || isTank ? "Tankbuster mitigation" : "Damage reduction applied");
                 }
             });
     }
