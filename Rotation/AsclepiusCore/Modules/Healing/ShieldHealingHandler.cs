@@ -6,6 +6,7 @@ using Olympus.Rotation.AsclepiusCore.Context;
 using Olympus.Rotation.ApolloCore.Helpers;
 using Olympus.Rotation.AsclepiusCore.Helpers;
 using Olympus.Rotation.Common.Scheduling;
+using static Olympus.Rotation.Common.Scheduling.HealerSchedulerPriorities;
 using Olympus.Services.Training;
 
 namespace Olympus.Rotation.AsclepiusCore.Modules.Healing;
@@ -140,8 +141,9 @@ public sealed class ShieldHealingHandler : IHealingHandler
             var capturedInjuredCount = injuredCount;
             var capturedAction = aoeAction;
             var capturedRaidwide = raidwideImminent;
+            var prognosisPriority = Mitigation(raidwideImminent, reactivePriority: Priority);
 
-            scheduler.PushGcd(aoeBehavior, player.GameObjectId, priority: Priority,
+            scheduler.PushGcd(aoeBehavior, player.GameObjectId, priority: prognosisPriority,
                 onDispatched: _ =>
                 {
                     context.Debug.PlannedAction = capturedAction.Name;
@@ -216,8 +218,12 @@ public sealed class ShieldHealingHandler : IHealingHandler
             var capturedTarget = target;
             var capturedHpPercent = hpPercent;
             var capturedTb = tankBusterImminent;
+            var diagnosisPriority = Mitigation(
+                tankBusterImminent,
+                timelineOffset: TimelineTankBusterOffset,
+                reactivePriority: Priority);
 
-            scheduler.PushGcd(AsclepiusAbilities.EukrasianDiagnosis, target.GameObjectId, priority: Priority,
+            scheduler.PushGcd(AsclepiusAbilities.EukrasianDiagnosis, target.GameObjectId, priority: diagnosisPriority,
                 onDispatched: _ =>
                 {
                     var healAmount = action.HealPotency * 10;

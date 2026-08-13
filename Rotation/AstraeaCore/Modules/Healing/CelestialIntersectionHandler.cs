@@ -6,6 +6,7 @@ using Olympus.Rotation.ApolloCore.Helpers;
 using Olympus.Rotation.AstraeaCore.Abilities;
 using Olympus.Rotation.AstraeaCore.Context;
 using Olympus.Rotation.Common.Scheduling;
+using static Olympus.Rotation.Common.Scheduling.HealerSchedulerPriorities;
 using Olympus.Services.Training;
 
 namespace Olympus.Rotation.AstraeaCore.Modules.Healing;
@@ -52,8 +53,12 @@ public sealed class CelestialIntersectionHandler : IHealingHandler
         var capturedTarget = target;
         var capturedHpPercent = hpPercent;
         var capturedTb = tankBusterImminent;
+        var ciPriority = Mitigation(
+            tankBusterImminent,
+            timelineOffset: TimelineTankBusterOffset,
+            reactivePriority: Priority);
 
-        scheduler.PushOgcd(AstraeaAbilities.CelestialIntersection, target.GameObjectId, priority: Priority,
+        scheduler.PushOgcd(AstraeaAbilities.CelestialIntersection, target.GameObjectId, priority: ciPriority,
             onDispatched: _ =>
             {
                 var healAmount = action.HealPotency * 10;

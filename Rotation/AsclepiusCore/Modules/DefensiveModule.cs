@@ -6,6 +6,7 @@ using Olympus.Rotation.AsclepiusCore.Context;
 using Olympus.Rotation.AsclepiusCore.Helpers;
 using Olympus.Rotation.Common.Modules;
 using Olympus.Rotation.Common.Scheduling;
+using static Olympus.Rotation.Common.Scheduling.HealerSchedulerPriorities;
 
 namespace Olympus.Rotation.AsclepiusCore.Modules;
 
@@ -70,9 +71,12 @@ public sealed class DefensiveModule : BaseDefensiveModule<IAsclepiusContext>, IA
         var capturedHpPercent = hpPercent;
         var capturedStacks = context.AddersgallStacks;
 
-        // Defensive Taurochole at priority 75 — loses to HealingModule's reactive Taurochole (10)
-        // when both conditions match, but fires when only the defensive (proactive tank buster) condition matches.
-        scheduler.PushOgcd(AsclepiusAbilities.TaurocholeDefensive, tank.GameObjectId, priority: 75,
+        // Timeline TB mit beats reactive heals; reactive defensive stays after heals.
+        var tauroPriority = Mitigation(
+            tankBusterImminent,
+            timelineOffset: TimelineTankBusterOffset,
+            reactivePriority: 90);
+        scheduler.PushOgcd(AsclepiusAbilities.TaurocholeDefensive, tank.GameObjectId, priority: tauroPriority,
             onDispatched: _ =>
             {
                 SetDefensiveState(context, "Taurochole");
@@ -119,8 +123,9 @@ public sealed class DefensiveModule : BaseDefensiveModule<IAsclepiusContext>, IA
         if (avgHp > config.PanhaimaThreshold && !raidwideImminent) { context.Debug.PanhaimaState = $"Avg HP {avgHp:P0}"; return; }
 
         var action = SGEActions.Panhaima;
+        var panhaimaPriority = Mitigation(raidwideImminent, reactivePriority: 90);
 
-        scheduler.PushOgcd(AsclepiusAbilities.PanhaimaDefensive, player.GameObjectId, priority: 80,
+        scheduler.PushOgcd(AsclepiusAbilities.PanhaimaDefensive, player.GameObjectId, priority: panhaimaPriority,
             onDispatched: _ =>
             {
                 SetDefensiveState(context, "Panhaima");

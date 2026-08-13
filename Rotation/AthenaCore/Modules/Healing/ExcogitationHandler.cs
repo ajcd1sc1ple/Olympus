@@ -6,6 +6,7 @@ using Olympus.Rotation.ApolloCore.Helpers;
 using Olympus.Rotation.AthenaCore.Abilities;
 using Olympus.Rotation.AthenaCore.Context;
 using Olympus.Rotation.Common.Scheduling;
+using static Olympus.Rotation.Common.Scheduling.HealerSchedulerPriorities;
 using Olympus.Services.Training;
 
 namespace Olympus.Rotation.AthenaCore.Modules.Healing;
@@ -57,8 +58,12 @@ public sealed class ExcogitationHandler : IHealingHandler
         var capturedHpPercent = hpPercent;
         var capturedTankBusterImminent = tankBusterImminent;
         var capturedHasRecitation = hasRecitation;
+        var excogPriority = Mitigation(
+            tankBusterImminent,
+            timelineOffset: TimelineTankBusterOffset,
+            reactivePriority: Priority);
 
-        scheduler.PushOgcd(AthenaAbilities.Excogitation, target.GameObjectId, priority: Priority,
+        scheduler.PushOgcd(AthenaAbilities.Excogitation, target.GameObjectId, priority: excogPriority,
             onDispatched: _ =>
             {
                 if (!capturedHasRecitation)

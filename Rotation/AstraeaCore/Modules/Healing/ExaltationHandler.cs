@@ -6,6 +6,7 @@ using Olympus.Rotation.ApolloCore.Helpers;
 using Olympus.Rotation.AstraeaCore.Abilities;
 using Olympus.Rotation.AstraeaCore.Context;
 using Olympus.Rotation.Common.Scheduling;
+using static Olympus.Rotation.Common.Scheduling.HealerSchedulerPriorities;
 using Olympus.Services.Training;
 
 namespace Olympus.Rotation.AstraeaCore.Modules.Healing;
@@ -53,8 +54,12 @@ public sealed class ExaltationHandler : IHealingHandler
         var capturedTarget = target;
         var capturedHpPercent = hpPercent;
         var capturedTb = tankBusterImminent;
+        var exaltPriority = Mitigation(
+            tankBusterImminent,
+            timelineOffset: TimelineTankBusterOffset,
+            reactivePriority: Priority);
 
-        scheduler.PushOgcd(AstraeaAbilities.Exaltation, target.GameObjectId, priority: Priority,
+        scheduler.PushOgcd(AstraeaAbilities.Exaltation, target.GameObjectId, priority: exaltPriority,
             onDispatched: _ =>
             {
                 var healAmount = action.HealPotency * 10;

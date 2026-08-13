@@ -7,6 +7,7 @@ using Olympus.Rotation.AthenaCore.Abilities;
 using Olympus.Rotation.AthenaCore.Context;
 using Olympus.Rotation.Common.Modules;
 using Olympus.Rotation.Common.Scheduling;
+using static Olympus.Rotation.Common.Scheduling.HealerSchedulerPriorities;
 using Olympus.Services.Training;
 
 namespace Olympus.Rotation.AthenaCore.Modules;
@@ -97,8 +98,9 @@ public sealed class DefensiveModule : BaseDefensiveModule<IAthenaContext>, IAthe
 
         var capturedAvgHp = avgHp;
         var capturedMembersInRange = membersInRange;
+        var expedientPriority = Mitigation(raidwideImminent, reactivePriority: 90);
 
-        scheduler.PushOgcd(AthenaAbilities.Expedient, player.GameObjectId, priority: 75,
+        scheduler.PushOgcd(AthenaAbilities.Expedient, player.GameObjectId, priority: expedientPriority,
             onDispatched: _ =>
             {
                 SetPlannedAction(context, SCHActions.Expedient.Name);

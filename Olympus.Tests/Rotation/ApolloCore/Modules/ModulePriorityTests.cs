@@ -4,7 +4,8 @@ namespace Olympus.Tests.Rotation.ApolloCore.Modules;
 
 /// <summary>
 /// Tests for Apollo module priority ordering.
-/// Ensures modules execute in the correct priority order.
+/// Collect order: Resurrection → Defensive (timeline mit) → Healing → Buffs → Damage.
+/// Candidate priorities still decide dispatch within each scheduler queue.
 /// </summary>
 public class ModulePriorityTests
 {
@@ -17,7 +18,6 @@ public class ModulePriorityTests
         var buff = new BuffModule();
         var damage = new DamageModule();
 
-        // Resurrection should have lowest priority number (highest priority)
         Assert.True(resurrection.Priority < healing.Priority);
         Assert.True(resurrection.Priority < defensive.Priority);
         Assert.True(resurrection.Priority < buff.Priority);
@@ -25,7 +25,7 @@ public class ModulePriorityTests
     }
 
     [Fact]
-    public void HealingModule_HasSecondHighestPriority()
+    public void DefensiveModule_CollectsBeforeHealing()
     {
         var resurrection = new ResurrectionModule();
         var healing = new HealingModule();
@@ -33,34 +33,35 @@ public class ModulePriorityTests
         var buff = new BuffModule();
         var damage = new DamageModule();
 
-        // Healing should be after resurrection but before others
-        Assert.True(healing.Priority > resurrection.Priority);
-        Assert.True(healing.Priority < defensive.Priority);
-        Assert.True(healing.Priority < buff.Priority);
-        Assert.True(healing.Priority < damage.Priority);
+        Assert.True(defensive.Priority > resurrection.Priority);
+        Assert.True(defensive.Priority < healing.Priority);
+        Assert.True(defensive.Priority < buff.Priority);
+        Assert.True(defensive.Priority < damage.Priority);
     }
 
     [Fact]
-    public void DefensiveModule_HasThirdHighestPriority()
+    public void HealingModule_CollectsBeforeBuffsAndDamage()
     {
         var healing = new HealingModule();
         var defensive = new DefensiveModule();
         var buff = new BuffModule();
         var damage = new DamageModule();
 
-        Assert.True(defensive.Priority > healing.Priority);
-        Assert.True(defensive.Priority < buff.Priority);
-        Assert.True(defensive.Priority < damage.Priority);
+        Assert.True(healing.Priority > defensive.Priority);
+        Assert.True(healing.Priority < buff.Priority);
+        Assert.True(healing.Priority < damage.Priority);
     }
 
     [Fact]
     public void BuffModule_HasFourthHighestPriority()
     {
         var defensive = new DefensiveModule();
+        var healing = new HealingModule();
         var buff = new BuffModule();
         var damage = new DamageModule();
 
         Assert.True(buff.Priority > defensive.Priority);
+        Assert.True(buff.Priority > healing.Priority);
         Assert.True(buff.Priority < damage.Priority);
     }
 
@@ -73,7 +74,6 @@ public class ModulePriorityTests
         var buff = new BuffModule();
         var damage = new DamageModule();
 
-        // Damage should have highest priority number (lowest priority)
         Assert.True(damage.Priority > resurrection.Priority);
         Assert.True(damage.Priority > healing.Priority);
         Assert.True(damage.Priority > defensive.Priority);
@@ -138,21 +138,20 @@ public class ModulePriorityTests
     {
         var modules = new List<IApolloModule>
         {
-            new DamageModule(),      // Added out of order
+            new DamageModule(),
             new HealingModule(),
             new BuffModule(),
             new ResurrectionModule(),
             new DefensiveModule()
         };
 
-        // Sort by priority (as Apollo.cs does)
         modules.Sort((a, b) => a.Priority.CompareTo(b.Priority));
 
         var expectedOrder = new[]
         {
             "Resurrection",
-            "Healing",
             "Defensive",
+            "Healing",
             "Buffs",
             "Damage"
         };
@@ -164,8 +163,8 @@ public class ModulePriorityTests
 
     [Theory]
     [InlineData(typeof(ResurrectionModule), 5)]
+    [InlineData(typeof(DefensiveModule), 8)]
     [InlineData(typeof(HealingModule), 10)]
-    [InlineData(typeof(DefensiveModule), 20)]
     [InlineData(typeof(BuffModule), 30)]
     [InlineData(typeof(DamageModule), 50)]
     public void Module_HasExpectedPriority(Type moduleType, int expectedPriority)

@@ -28,7 +28,7 @@ public class TankBusterShieldPrepTests
     }
 
     [Fact]
-    public void Krasis_TankBusterImminentFullHp_PushesAtPriority30()
+    public void Krasis_TankBusterImminentFullHp_PushesAtTimelineMitPriority()
     {
         var config = AsclepiusTestContext.CreateDefaultSageConfiguration();
         config.Sage.EnableKrasis = true;
@@ -59,7 +59,8 @@ public class TankBusterShieldPrepTests
         new KrasisHandler().CollectCandidates(context, scheduler, isMoving: false);
 
         var candidate = Assert.Single(scheduler.InspectOgcdQueue(), c => c.Behavior == AsclepiusAbilities.Krasis);
-        Assert.Equal(30, candidate.Priority);
+        // TimelineMitigation (8) + TimelineTankBusterOffset (1)
+        Assert.Equal(9, candidate.Priority);
         Assert.Equal(tank.Object.GameObjectId, candidate.TargetId);
     }
 

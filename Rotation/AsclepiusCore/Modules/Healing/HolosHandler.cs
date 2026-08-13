@@ -5,6 +5,7 @@ using Olympus.Rotation.ApolloCore.Helpers;
 using Olympus.Rotation.AsclepiusCore.Abilities;
 using Olympus.Rotation.AsclepiusCore.Context;
 using Olympus.Rotation.Common.Scheduling;
+using static Olympus.Rotation.Common.Scheduling.HealerSchedulerPriorities;
 using Olympus.Services.Training;
 
 namespace Olympus.Rotation.AsclepiusCore.Modules.Healing;
@@ -73,8 +74,9 @@ public sealed class HolosHandler : IHealingHandler
         var capturedInjuredCount = injuredCount;
         var capturedRaidwide = raidwideImminent;
         var action = SGEActions.Holos;
+        var holosPriority = Mitigation(raidwideImminent, reactivePriority: Priority);
 
-        scheduler.PushOgcd(AsclepiusAbilities.Holos, player.GameObjectId, priority: Priority,
+        scheduler.PushOgcd(AsclepiusAbilities.Holos, player.GameObjectId, priority: holosPriority,
             onDispatched: _ =>
             {
                 context.Debug.PlannedAction = action.Name;

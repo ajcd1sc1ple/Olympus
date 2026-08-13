@@ -9,6 +9,7 @@ using Olympus.Rotation.AthenaCore.Abilities;
 using Olympus.Rotation.AthenaCore.Context;
 using Olympus.Rotation.Common.Helpers;
 using Olympus.Rotation.Common.Scheduling;
+using static Olympus.Rotation.Common.Scheduling.HealerSchedulerPriorities;
 using Olympus.Services.Training;
 
 namespace Olympus.Rotation.AthenaCore.Modules.Healing;
@@ -51,7 +52,8 @@ public sealed class SingleTargetHealHandler : IHealingHandler
                 var tbHp = context.PartyHelper.GetHpPercent(tank);
                 if (TrySelectAdlo(context, config, player, tank, out var tbAction, out var tbBehavior))
                 {
-                    PushHeal(context, scheduler, config, tbAction, tbBehavior, tank, tbHp, tankBusterImminent: true, Priority);
+                    PushHeal(context, scheduler, config, tbAction, tbBehavior, tank, tbHp, tankBusterImminent: true,
+                        Mitigation(true, timelineOffset: TimelineTankBusterOffset, reactivePriority: Priority));
                     return;
                 }
             }

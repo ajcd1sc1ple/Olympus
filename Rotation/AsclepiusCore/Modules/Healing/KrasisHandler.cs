@@ -6,15 +6,13 @@ using Olympus.Rotation.AsclepiusCore.Abilities;
 using Olympus.Rotation.AsclepiusCore.Context;
 using Olympus.Rotation.AsclepiusCore.Helpers;
 using Olympus.Rotation.Common.Scheduling;
+using static Olympus.Rotation.Common.Scheduling.HealerSchedulerPriorities;
 using Olympus.Services.Training;
 
 namespace Olympus.Rotation.AsclepiusCore.Modules.Healing;
 
 public sealed class KrasisHandler : IHealingHandler
 {
-    // Higher priority during TB prep so Krasis lands before Haima/Taurochole heals.
-    private const int TankBusterPriority = 30;
-
     public int Priority => 55;
     public string Name => "Krasis";
 
@@ -47,7 +45,10 @@ public sealed class KrasisHandler : IHealingHandler
         var capturedHpPercent = hpPercent;
         var capturedTb = tankBusterImminent;
         var action = SGEActions.Krasis;
-        var priority = tankBusterImminent ? TankBusterPriority : Priority;
+        var priority = Mitigation(
+            tankBusterImminent,
+            timelineOffset: TimelineTankBusterOffset,
+            reactivePriority: Priority);
 
         scheduler.PushOgcd(AsclepiusAbilities.Krasis, target.GameObjectId, priority: priority,
             onDispatched: _ =>

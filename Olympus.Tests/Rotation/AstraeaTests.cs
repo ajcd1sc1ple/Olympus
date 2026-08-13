@@ -47,12 +47,12 @@ public class AstraeaTests
     }
 
     [Fact]
-    public void ModulePriorities_HealingBeforeDefensive()
+    public void ModulePriorities_DefensiveBeforeHealing()
     {
         var healing = new HealingModule();
         var defensive = new DefensiveModule();
 
-        Assert.True(healing.Priority < defensive.Priority);
+        Assert.True(defensive.Priority < healing.Priority);
     }
 
     [Fact]
@@ -78,8 +78,8 @@ public class AstraeaTests
     {
         Assert.Equal(3, new CardModule().Priority);
         Assert.Equal(5, new ResurrectionModule().Priority);
+        Assert.Equal(8, new DefensiveModule().Priority);
         Assert.Equal(10, new HealingModule().Priority);
-        Assert.Equal(20, new DefensiveModule().Priority);
         Assert.Equal(30, new BuffModule().Priority);
         Assert.Equal(50, new DamageModule().Priority);
     }

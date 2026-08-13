@@ -6,6 +6,7 @@ using Olympus.Rotation.AsclepiusCore.Abilities;
 using Olympus.Rotation.AsclepiusCore.Context;
 using Olympus.Rotation.AsclepiusCore.Helpers;
 using Olympus.Rotation.Common.Scheduling;
+using static Olympus.Rotation.Common.Scheduling.HealerSchedulerPriorities;
 using Olympus.Services.Training;
 
 namespace Olympus.Rotation.AsclepiusCore.Modules.Healing;
@@ -47,8 +48,12 @@ public sealed class HaimaHandler : IHealingHandler
         var capturedHpPercent = hpPercent;
         var capturedTankBusterImminent = tankBusterImminent;
         var action = SGEActions.Haima;
+        var haimaPriority = Mitigation(
+            tankBusterImminent,
+            timelineOffset: TimelineTankBusterOffset,
+            reactivePriority: Priority);
 
-        scheduler.PushOgcd(AsclepiusAbilities.Haima, tank.GameObjectId, priority: Priority,
+        scheduler.PushOgcd(AsclepiusAbilities.Haima, tank.GameObjectId, priority: haimaPriority,
             onDispatched: _ =>
             {
                 var healAmount = action.HealPotency * 10;

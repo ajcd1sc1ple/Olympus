@@ -6,6 +6,7 @@ using Olympus.Rotation.ApolloCore.Helpers;
 using Olympus.Rotation.AthenaCore.Abilities;
 using Olympus.Rotation.AthenaCore.Context;
 using Olympus.Rotation.Common.Scheduling;
+using static Olympus.Rotation.Common.Scheduling.HealerSchedulerPriorities;
 using Olympus.Services.Training;
 
 namespace Olympus.Rotation.AthenaCore.Modules.Healing;
@@ -50,8 +51,12 @@ public sealed class ProtractionHandler : IHealingHandler
         var capturedTarget = target;
         var capturedHpPercent = hpPercent;
         var capturedTb = tankBusterImminent;
+        var protractionPriority = Mitigation(
+            tankBusterImminent,
+            timelineOffset: TimelineTankBusterOffset,
+            reactivePriority: Priority);
 
-        scheduler.PushOgcd(AthenaAbilities.Protraction, target.GameObjectId, priority: Priority,
+        scheduler.PushOgcd(AthenaAbilities.Protraction, target.GameObjectId, priority: protractionPriority,
             onDispatched: _ =>
             {
                 var healAmount = 1000;
