@@ -68,8 +68,9 @@ public abstract class BaseTankDamageModule<TContext> : IRotationModule<TContext>
             return false;
         }
 
-        // Phase 2: Combat check
-        if (!context.InCombat)
+        // Phase 2: Combat check — allow hard-target pull before server InCombat flips
+        // (same bootstrap as DPS/healer BaseDamageModule).
+        if (!context.InCombat && context.TargetingService.GetUserEnemyTarget() == null)
         {
             SetDamageState(context, "Not in combat");
             return false;

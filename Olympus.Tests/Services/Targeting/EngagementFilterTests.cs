@@ -117,9 +117,40 @@ public sealed class EngagementFilterTests
         var svc = BuildService([adjacent.Object]);
         var player = MakePlayer(flags: 0);
 
+        // Sole hostile in range IS selectable (boss-seal pull bootstrap). A single
+        // adjacent mob looks like a boss arena — packs need 2+ to stay blocked.
+        Assert.NotNull(svc.FindEnemy(EnemyTargetingStrategy.LowestHp, 25f, player));
+        Assert.Equal(1, svc.CountEnemiesInRange(25f, player));
+    }
+
+    [Fact]
+    public void PlayerOutOfCombat_ExcludesUnpulledMultiPack_WithoutHardTarget()
+    {
+        var a = MakeEnemy(30, hp: 2_000, flags: 0, pos: new Vector3(1f, 0f, 0f));
+        var b = MakeEnemy(31, hp: 2_000, flags: 0, pos: new Vector3(2f, 0f, 0f));
+
+        var svc = BuildService([a.Object, b.Object]);
+        var player = MakePlayer(flags: 0);
+
         Assert.Null(svc.FindEnemy(EnemyTargetingStrategy.LowestHp, 25f, player));
         Assert.Equal(0, svc.CountEnemiesInRange(25f, player));
         Assert.Null(svc.FindBestAoETarget(5f, 25f, player).target);
+    }
+
+    [Fact]
+    public void PlayerOutOfCombat_SoleBossWithoutInCombat_IsSelectableForPull()
+    {
+        // Boss seal: neither player nor boss has InCombat yet, no hard target.
+        // Must still Find/Count so combat bootstrap can start DPS.
+        var boss = MakeEnemy(32, hp: 1_000_000, flags: 0);
+
+        var svc = BuildService([boss.Object], currentTarget: null);
+        var player = MakePlayer(flags: 0);
+
+        Assert.Equal(1, svc.CountEnemiesInRange(30f, player));
+        var target = svc.FindEnemy(EnemyTargetingStrategy.LowestHp, 30f, player);
+        Assert.NotNull(target);
+        Assert.Equal(32ul, target!.GameObjectId);
     }
 
     [Fact]

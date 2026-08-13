@@ -41,6 +41,10 @@ public sealed class TargetingService : ITargetingService
     // brief Tab-retarget gaps without stalling DPS (gaze still pauses after grace).
     private long? _noTargetSinceTickMs;
 
+    // Memo for OOC sole-hostile pull bootstrap (one object-table scan per tick).
+    private long _soleBootstrapTickMs = long.MinValue;
+    private ulong _soleBootstrapHostileId;
+
     // Tank job IDs: PLD=19, WAR=21, DRK=32, GNB=37
     private static readonly HashSet<uint> TankJobIds = [19, 21, 32, 37];
 
@@ -542,21 +546,73 @@ public sealed class TargetingService : ITargetingService
     /// Shared engagement gate for damage targeting (Count / Find* / AoE best-target).
     /// Always allows the hard target (dummies, intentional pulls). While the player is
     /// in combat, every valid hostile is selectable — pack adds often lag on
-    /// <see cref="StatusFlags.InCombat"/> after a pull, and filtering them out caused
-    /// ST/AoE to disagree (or find nothing) when multiple enemies were present.
-    /// Out of combat, only enemies already flagged InCombat are selectable so adjacent
-    /// unpulled packs are not touched.
+    /// <see cref="StatusFlags.InCombat"/> after a pull. Out of combat, enemies already
+    /// flagged InCombat are selectable (tank-pulled boss). Additionally, a sole
+    /// targetable hostile within bootstrap range is selectable so boss-seal pulls can
+    /// start before either InCombat flag flips — multi-mob trash stays blocked.
     /// </summary>
     private bool IsEnemySelectableForDamage(IBattleNpc enemy, IPlayerCharacter player)
     {
-        if (_targetManager.Target is IBattleNpc hardTarget
-            && hardTarget.GameObjectId == enemy.GameObjectId)
-            return true;
+        var isHardTarget = _targetManager.Target is IBattleNpc hardTarget
+            && hardTarget.GameObjectId == enemy.GameObjectId;
+        var playerInCombat = (player.StatusFlags & StatusFlags.InCombat) != 0;
+        var enemyInCombat = (enemy.StatusFlags & StatusFlags.InCombat) != 0;
+        var soleId = GetSoleBootstrapHostileId(player);
+        var isSole = soleId != 0UL && soleId == enemy.GameObjectId;
 
-        if ((player.StatusFlags & StatusFlags.InCombat) != 0)
-            return true;
+        return DamageEngagementDecision.IsSelectable(
+            isHardTarget,
+            playerInCombat,
+            enemyInCombat,
+            isSole);
+    }
 
-        return (enemy.StatusFlags & StatusFlags.InCombat) != 0;
+    /// <summary>
+    /// Scans once per tick for a single targetable hostile in pull-bootstrap range.
+    /// Does not touch the GetValidEnemies cache (avoids range/cache recursion).
+    /// </summary>
+    private ulong GetSoleBootstrapHostileId(IPlayerCharacter player)
+    {
+        var now = Environment.TickCount64;
+        if (_soleBootstrapTickMs == now)
+            return _soleBootstrapHostileId;
+
+        _soleBootstrapTickMs = now;
+        _soleBootstrapHostileId = 0UL;
+
+        var playerPos = player.Position;
+        var maxRange = DamageEngagementDecision.PullBootstrapRangeYalms;
+        var maxRangeYalms = (byte)Math.Ceiling(maxRange);
+        ulong soleId = 0UL;
+
+        foreach (var obj in _objectTable)
+        {
+            if (obj.ObjectKind != ObjectKind.BattleNpc)
+                continue;
+            if (obj is not IBattleNpc npc)
+                continue;
+            if (!obj.IsTargetable || obj.IsDead)
+                continue;
+            if ((byte)npc.BattleNpcKind != Olympus.Compat.BattleNpcKinds.Combatant && npc.SubKind != 0)
+                continue;
+            if (obj.CurrentDistance > maxRangeYalms + (int)Math.Ceiling(obj.HitboxRadius))
+                continue;
+
+            var effectiveRange = maxRange + npc.HitboxRadius + player.HitboxRadius;
+            if (Vector3.DistanceSquared(playerPos, npc.Position) > effectiveRange * effectiveRange)
+                continue;
+
+            if (soleId != 0UL)
+            {
+                _soleBootstrapHostileId = 0UL; // more than one — no bootstrap
+                return 0UL;
+            }
+
+            soleId = npc.GameObjectId;
+        }
+
+        _soleBootstrapHostileId = soleId;
+        return soleId;
     }
 
     private IBattleNpc? FindLowestHpEnemy(float maxRange, IPlayerCharacter player)
@@ -787,8 +843,11 @@ public sealed class TargetingService : ITargetingService
             if (Vector3.DistanceSquared(playerPos, npc.Position) > effectiveRange * effectiveRange)
                 continue;
 
-            // Line-of-sight check — reject enemies behind walls/pillars
-            if (_configuration.Targeting.EnableLineOfSightFiltering &&
+            // Line-of-sight check — reject enemies behind walls/pillars.
+            // Hard target is exempt: seal geometry / arena pillars must not null Find
+            // at boss pull when the player already selected the boss.
+            if (!isHardTarget &&
+                _configuration.Targeting.EnableLineOfSightFiltering &&
                 !HasLineOfSight(playerPos, npc.Position))
                 continue;
 

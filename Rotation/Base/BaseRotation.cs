@@ -116,8 +116,6 @@ public abstract class BaseRotation<TContext, TModule> : IRotation, IDisposable, 
     /// Range used to detect already-engaged enemies when bootstrapping combat before
     /// the local player's server InCombat flag flips (healer pull lag).
     /// </summary>
-    private const float CombatBootstrapRangeYalms = 30f;
-
     // Error throttling to avoid log spam
     private DateTime _lastErrorTime = DateTime.MinValue;
     private int _suppressedErrorCount;
@@ -320,11 +318,11 @@ public abstract class BaseRotation<TContext, TModule> : IRotation, IDisposable, 
         if (!inCombat && AutoAttackService?.ShouldTreatAsInCombat == true)
             inCombat = true;
         // Healers often wait seconds for their own InCombat flag after a tank pull.
-        // Start DPS when a hostile is hard-targeted (also covers AA-until-dead off) or
-        // when enemies are already engaged nearby (engagement filter counts those OOC).
+        // Start DPS when a hostile is hard-targeted, or when engagement Find/Count sees
+        // an engaged or sole nearby hostile (boss seal before flags flip).
         if (!inCombat
             && (TargetingService.GetUserEnemyTarget() != null
-                || TargetingService.CountEnemiesInRange(CombatBootstrapRangeYalms, player) > 0))
+                || TargetingService.CountEnemiesInRange(DamageEngagementDecision.PullBootstrapRangeYalms, player) > 0))
             inCombat = true;
         UpdateCombatState(inCombat);
 
