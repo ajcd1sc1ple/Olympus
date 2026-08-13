@@ -42,7 +42,7 @@ public sealed class AoEHealingHandler : IHealingHandler
         var (cureIIITarget, cureIIITargetCount, cureIIITargetIds) =
             context.PartyHelper.FindBestCureIIITarget(player, cureIIIHealAmount);
 
-        var raidwideImminent = TimelineHelper.IsRaidwideImminent(
+        var raidwideImminent = TimelineHelper.IsRaidwideImminentForGcdHealPrep(
             context.TimelineService,
             context.BossMechanicDetector,
             config,

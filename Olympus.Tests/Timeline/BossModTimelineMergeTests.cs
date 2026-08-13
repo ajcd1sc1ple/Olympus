@@ -33,7 +33,7 @@ public class BossModTimelineMergeTests
         var merged = BossModTimelineMerge.MergeRaidwide(timelineSeconds: 4f, hintSeconds: 2f, cactbot);
 
         Assert.NotNull(merged);
-        Assert.Equal("BossMod raidwide", merged!.Value.Name);
+        Assert.Equal("BossMod raidwide (cast)", merged!.Value.Name);
         Assert.Equal(2f, merged.Value.SecondsUntil);
     }
 
@@ -44,7 +44,7 @@ public class BossModTimelineMergeTests
         var merged = BossModTimelineMerge.MergeRaidwide(timelineSeconds: 12f, hintSeconds: null, cactbot);
 
         Assert.NotNull(merged);
-        Assert.Equal("BossMod raidwide", merged!.Value.Name);
+        Assert.Equal("BossMod raidwide (timeline)", merged!.Value.Name);
         Assert.Equal(12f, merged.Value.SecondsUntil);
         Assert.Equal(BossModTimelineMerge.BossModConfidence, merged.Value.Confidence);
     }
@@ -60,13 +60,48 @@ public class BossModTimelineMergeTests
     }
 
     [Fact]
+    public void MergeRaidwideForGcdHealPrep_IgnoresCastHint()
+    {
+        // Anthracite-style: cast-hint fires on every bomb AoE (2s) while the real
+        // Timeline raidwide is further out (12s). GCD prep must use Timeline only.
+        var cactbot = new MechanicPrediction(20f, TimelineEntryType.Raidwide, "Cactbot RW", 0.85f);
+        var merged = BossModTimelineMerge.MergeRaidwideForGcdHealPrep(
+            timelineSeconds: 12f, hintSeconds: 2f, cactbot);
+
+        Assert.NotNull(merged);
+        Assert.Equal("BossMod raidwide (timeline)", merged!.Value.Name);
+        Assert.Equal(12f, merged.Value.SecondsUntil);
+    }
+
+    [Fact]
+    public void MergeRaidwideForGcdHealPrep_FallsBackToCactbotWhenNoTimeline()
+    {
+        var cactbot = new MechanicPrediction(7f, TimelineEntryType.Raidwide, "Cactbot RW", 0.85f);
+        var merged = BossModTimelineMerge.MergeRaidwideForGcdHealPrep(
+            timelineSeconds: null, hintSeconds: 1.5f, cactbot);
+
+        Assert.NotNull(merged);
+        Assert.Equal("Cactbot RW", merged!.Value.Name);
+    }
+
+    [Fact]
     public void MergeTankBuster_PrefersCastHintOverTimeline()
     {
         var merged = BossModTimelineMerge.MergeTankBuster(10f, 2.5f, null);
 
         Assert.NotNull(merged);
-        Assert.Equal("BossMod tankbuster", merged!.Value.Name);
+        Assert.Equal("BossMod tankbuster (cast)", merged!.Value.Name);
         Assert.Equal(2.5f, merged.Value.SecondsUntil);
+    }
+
+    [Fact]
+    public void MergeTankBusterForGcdHealPrep_IgnoresCastHint()
+    {
+        var merged = BossModTimelineMerge.MergeTankBusterForGcdHealPrep(8f, 1f, null);
+
+        Assert.NotNull(merged);
+        Assert.Equal("BossMod tankbuster (timeline)", merged!.Value.Name);
+        Assert.Equal(8f, merged.Value.SecondsUntil);
     }
 
     [Fact]

@@ -62,6 +62,49 @@ public static class TimelineHelper
     }
 
     /// <summary>
+    /// Raidwide check for GCD heal/shield prep only.
+    /// Uses <see cref="ITimelineService.NextRaidwideForGcdHealPrep"/> which ignores BossMod
+    /// cast-hints (bomb/bait AoEs). Falls back to pattern detection like
+    /// <see cref="IsRaidwideImminent"/>.
+    /// </summary>
+    public static bool IsRaidwideImminentForGcdHealPrep(
+        ITimelineService? timelineService,
+        IBossMechanicDetector? bossMechanicDetector,
+        Configuration config,
+        out string source,
+        float? windowSeconds = null)
+    {
+        source = "None";
+        var window = windowSeconds ?? config.Healing.RaidwidePreparationWindow;
+
+        if (config.Timeline.EnableTimelinePredictions &&
+            timelineService is not null &&
+            timelineService.IsActive &&
+            timelineService.Confidence >= config.Timeline.TimelineConfidenceThreshold)
+        {
+            var nextRaidwide = timelineService.NextRaidwideForGcdHealPrep;
+            if (nextRaidwide.HasValue &&
+                nextRaidwide.Value.SecondsUntil <= window &&
+                nextRaidwide.Value.SecondsUntil > 0)
+            {
+                source = "Timeline";
+                return true;
+            }
+        }
+
+        if (config.Healing.EnableMechanicAwareness && bossMechanicDetector is not null)
+        {
+            if (bossMechanicDetector.IsRaidwideImminent)
+            {
+                source = "Pattern";
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Checks if a tank buster is imminent using the best available source.
     /// Returns true if timeline predicts a tank buster within the preparation window,
     /// or if the BossMechanicDetector (fallback) predicts one.
@@ -96,6 +139,44 @@ public static class TimelineHelper
         }
 
         // Priority 2: Boss mechanic detector (reactive pattern detection)
+        if (config.Healing.EnableMechanicAwareness && bossMechanicDetector is not null)
+        {
+            if (bossMechanicDetector.IsTankBusterImminent)
+            {
+                source = "Pattern";
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Tank-buster check for GCD shield prep only (ignores BossMod cast-hints).
+    /// </summary>
+    public static bool IsTankBusterImminentForGcdHealPrep(
+        ITimelineService? timelineService,
+        IBossMechanicDetector? bossMechanicDetector,
+        Configuration config,
+        out string source)
+    {
+        source = "None";
+
+        if (config.Timeline.EnableTimelinePredictions &&
+            timelineService is not null &&
+            timelineService.IsActive &&
+            timelineService.Confidence >= config.Timeline.TimelineConfidenceThreshold)
+        {
+            var nextTankBuster = timelineService.NextTankBusterForGcdHealPrep;
+            if (nextTankBuster.HasValue &&
+                nextTankBuster.Value.SecondsUntil <= config.Healing.TankBusterPreparationWindow &&
+                nextTankBuster.Value.SecondsUntil > 0)
+            {
+                source = "Timeline";
+                return true;
+            }
+        }
+
         if (config.Healing.EnableMechanicAwareness && bossMechanicDetector is not null)
         {
             if (bossMechanicDetector.IsTankBusterImminent)

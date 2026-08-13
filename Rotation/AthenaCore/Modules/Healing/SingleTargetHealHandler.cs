@@ -32,7 +32,7 @@ public sealed class SingleTargetHealHandler : IHealingHandler
 
         if (!config.EnableAdloquium && !config.EnablePhysick) return;
 
-        var tankBusterImminent = TimelineHelper.IsTankBusterImminent(
+        var tankBusterImminent = TimelineHelper.IsTankBusterImminentForGcdHealPrep(
             context.TimelineService, context.BossMechanicDetector, context.Configuration, out _);
 
         if (tankBusterImminent && config.EnableAdloquium)

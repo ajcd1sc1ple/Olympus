@@ -26,6 +26,7 @@ public class SingleTargetHealHandlerTankBusterTests
         m.Setup(s => s.IsActive).Returns(true);
         m.Setup(s => s.Confidence).Returns(1f);
         m.Setup(s => s.NextTankBuster).Returns((MechanicPrediction?)prediction);
+        m.Setup(s => s.NextTankBusterForGcdHealPrep).Returns((MechanicPrediction?)prediction);
         return m;
     }
 

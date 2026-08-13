@@ -637,7 +637,8 @@ public sealed class TargetingService : ITargetingService
     private IBattleNpc? FindCurrentTarget(float maxRange, IPlayerCharacter player)
     {
         var target = _targetManager.Target;
-        if (target is IBattleNpc enemy && IsValidEnemy(enemy, maxRange, player))
+        // Allow brief IsTargetable flicker on the player's explicit target.
+        if (target is IBattleNpc enemy && IsValidEnemy(enemy, maxRange, player, allowUntargetable: true))
             return enemy;
 
         return null;
@@ -699,7 +700,15 @@ public sealed class TargetingService : ITargetingService
             if (obj.ObjectKind != ObjectKind.BattleNpc)
                 continue;
 
-            if (!obj.IsTargetable)
+            // Type cast early so we can exempt the hard target from IsTargetable flicker.
+            if (obj is not IBattleNpc npc)
+                continue;
+
+            var isHardTarget = hardTargetId != 0UL && npc.GameObjectId == hardTargetId;
+
+            // Bosses briefly drop IsTargetable during timeline events; keep the hard target
+            // so DPS does not go idle for the whole dodge sequence (Anthracite, etc.).
+            if (!obj.IsTargetable && !isHardTarget)
                 continue;
 
             if (obj.IsDead)
@@ -707,10 +716,6 @@ public sealed class TargetingService : ITargetingService
 
             // Quick yalm-based range pre-filter (generous buffer for large hitboxes)
             if (obj.CurrentDistance > maxRangeYalms + (int)Math.Ceiling(obj.HitboxRadius))
-                continue;
-
-            // Type cast
-            if (obj is not IBattleNpc npc)
                 continue;
 
             // Check if hostile (enemy or striking dummy)
@@ -726,8 +731,6 @@ public sealed class TargetingService : ITargetingService
             if (_configuration.Targeting.EnableLineOfSightFiltering &&
                 !HasLineOfSight(playerPos, npc.Position))
                 continue;
-
-            var isHardTarget = hardTargetId != 0UL && npc.GameObjectId == hardTargetId;
 
             // Invulnerability check — skip enemies with known invuln status effects
             // (boss phase transitions, invulnerable adds, untouchable objects).
@@ -749,9 +752,12 @@ public sealed class TargetingService : ITargetingService
         }
     }
 
-    private static bool IsValidEnemy(IBattleNpc enemy, float maxRange, IPlayerCharacter player)
+    private bool IsValidEnemy(IBattleNpc enemy, float maxRange, IPlayerCharacter player, bool allowUntargetable = false)
     {
-        if (!enemy.IsTargetable || enemy.IsDead)
+        if (enemy.IsDead)
+            return false;
+
+        if (!allowUntargetable && !enemy.IsTargetable)
             return false;
 
         if ((byte)enemy.BattleNpcKind != Olympus.Compat.BattleNpcKinds.Combatant && enemy.SubKind != 0)
@@ -760,9 +766,17 @@ public sealed class TargetingService : ITargetingService
         return DistanceHelper.IsInRange(player.Position, enemy.Position, maxRange + enemy.HitboxRadius + player.HitboxRadius);
     }
 
-    private static bool IsStillValid(IBattleNpc enemy)
+    private bool IsStillValid(IBattleNpc enemy)
     {
-        return enemy.IsTargetable && !enemy.IsDead;
+        if (enemy.IsDead)
+            return false;
+
+        // Keep cached hard target through brief IsTargetable flicker.
+        if (_targetManager.Target is IBattleNpc hard
+            && hard.GameObjectId == enemy.GameObjectId)
+            return true;
+
+        return enemy.IsTargetable;
     }
 
     /// <summary>

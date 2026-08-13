@@ -30,9 +30,9 @@ public sealed class ShieldHealingHandler : IHealingHandler
 
         if (player.Level < SGEActions.Eukrasia.MinLevel) return;
 
-        var raidwideImminent = TimelineHelper.IsRaidwideImminent(
+        var raidwideImminent = TimelineHelper.IsRaidwideImminentForGcdHealPrep(
             context.TimelineService, context.BossMechanicDetector, context.Configuration, out _);
-        var tankBusterImminent = TimelineHelper.IsTankBusterImminent(
+        var tankBusterImminent = TimelineHelper.IsTankBusterImminentForGcdHealPrep(
             context.TimelineService, context.BossMechanicDetector, context.Configuration, out _);
 
         if (context.HasEukrasia)

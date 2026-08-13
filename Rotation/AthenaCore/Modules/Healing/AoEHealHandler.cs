@@ -34,7 +34,7 @@ public sealed class AoEHealHandler : IHealingHandler
         var (count, _) = context.PartyHelper.CountPartyMembersNeedingAoEHeal(player, 0);
         var (avgHp, _, injuredCount) = context.PartyHelper.CalculatePartyHealthMetrics(player);
 
-        var raidwideImminent = TimelineHelper.IsRaidwideImminent(
+        var raidwideImminent = TimelineHelper.IsRaidwideImminentForGcdHealPrep(
             context.TimelineService, context.BossMechanicDetector, context.Configuration, out _);
 
         // If Succor shields are already up, do not keep re-casting on a sticky timeline

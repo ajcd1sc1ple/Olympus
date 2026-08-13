@@ -40,13 +40,26 @@ public interface ITimelineService
 
     /// <summary>
     /// The next predicted raidwide mechanic, or null if none upcoming.
+    /// Merges BossMod cast-hint (preferred), Timeline, then Cactbot — for display / oGCD mit.
     /// </summary>
     MechanicPrediction? NextRaidwide { get; }
 
     /// <summary>
+    /// Raidwide used for GCD heal/shield prep. Ignores BossMod cast-hints (which fire for
+    /// many non-raidwide party AoEs). Timeline + Cactbot only.
+    /// </summary>
+    MechanicPrediction? NextRaidwideForGcdHealPrep { get; }
+
+    /// <summary>
     /// The next predicted tank buster, or null if none upcoming.
+    /// Merges BossMod cast-hint (preferred), Timeline, then Cactbot — for display / oGCD mit.
     /// </summary>
     MechanicPrediction? NextTankBuster { get; }
+
+    /// <summary>
+    /// Tank buster used for GCD shield prep. Ignores BossMod cast-hints.
+    /// </summary>
+    MechanicPrediction? NextTankBusterForGcdHealPrep { get; }
 
     /// <summary>
     /// Checks if a mechanic of the specified type is imminent.

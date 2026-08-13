@@ -33,7 +33,7 @@ public static class BossModTimelineMerge
     }
 
     /// <summary>
-    /// One BossMod answer: prefer cast-hint (actual damage timing) when present,
+    /// Display / oGCD mit: prefer cast-hint (actual damage timing) when present,
     /// otherwise Timeline state-machine. Cactbot is fallback only.
     /// </summary>
     public static MechanicPrediction? MergeRaidwide(
@@ -41,13 +41,29 @@ public static class BossModTimelineMerge
         float? hintSeconds,
         MechanicPrediction? cactbot)
     {
-        var bossMod = FromSeconds(hintSeconds, TimelineEntryType.Raidwide, "BossMod raidwide")
-                      ?? FromSeconds(timelineSeconds, TimelineEntryType.Raidwide, "BossMod raidwide");
+        var bossMod = FromSeconds(hintSeconds, TimelineEntryType.Raidwide, "BossMod raidwide (cast)")
+                      ?? FromSeconds(timelineSeconds, TimelineEntryType.Raidwide, "BossMod raidwide (timeline)");
         return bossMod ?? cactbot;
     }
 
     /// <summary>
-    /// One BossMod answer: prefer cast-hint when present, otherwise Timeline.
+    /// GCD heal/shield prep must NOT use BossMod cast-hints.
+    /// <c>Hints.NextRaidwideDamageIn</c> fires for many party-hitting AoEs (Anthracite
+    /// bombs, baited circles, etc.), which kept Succor/Helios/E.Prognosis at priority
+    /// 10–30 for entire fights and starved DPS. Timeline + Cactbot mark real raidwides.
+    /// </summary>
+    public static MechanicPrediction? MergeRaidwideForGcdHealPrep(
+        float? timelineSeconds,
+        float? hintSeconds,
+        MechanicPrediction? cactbot)
+    {
+        _ = hintSeconds;
+        return FromSeconds(timelineSeconds, TimelineEntryType.Raidwide, "BossMod raidwide (timeline)")
+               ?? cactbot;
+    }
+
+    /// <summary>
+    /// Display / oGCD mit: prefer cast-hint when present, otherwise Timeline.
     /// Cactbot is fallback only.
     /// </summary>
     public static MechanicPrediction? MergeTankBuster(
@@ -55,8 +71,21 @@ public static class BossModTimelineMerge
         float? hintSeconds,
         MechanicPrediction? cactbot)
     {
-        var bossMod = FromSeconds(hintSeconds, TimelineEntryType.TankBuster, "BossMod tankbuster")
-                      ?? FromSeconds(timelineSeconds, TimelineEntryType.TankBuster, "BossMod tankbuster");
+        var bossMod = FromSeconds(hintSeconds, TimelineEntryType.TankBuster, "BossMod tankbuster (cast)")
+                      ?? FromSeconds(timelineSeconds, TimelineEntryType.TankBuster, "BossMod tankbuster (timeline)");
         return bossMod ?? cactbot;
+    }
+
+    /// <summary>
+    /// GCD tank-buster shield prep: Timeline + Cactbot only (same rationale as raidwide).
+    /// </summary>
+    public static MechanicPrediction? MergeTankBusterForGcdHealPrep(
+        float? timelineSeconds,
+        float? hintSeconds,
+        MechanicPrediction? cactbot)
+    {
+        _ = hintSeconds;
+        return FromSeconds(timelineSeconds, TimelineEntryType.TankBuster, "BossMod tankbuster (timeline)")
+               ?? cactbot;
     }
 }
